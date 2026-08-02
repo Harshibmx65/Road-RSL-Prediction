@@ -1,34 +1,36 @@
-# Predicting Pavement Condition and Remaining Service Life 🛣️
-**Group 18 | Department of AI & ML | Acharya Institute of Technology**  
+# Predicting Pavement Condition and Road Health Index 🛣️
+
+**Group 18 | Department of AI & ML | Acharya Institute of Technology**
+
 **Guide**: Mr. Mohammed Tahir Mirji | Assistant Professor
 
 ---
 
 ## 1. Project Overview
+
 ### What This Project Does
-This project builds a machine learning system that predicts the health condition and remaining useful life (RUL) of road pavements using Non-Destructive Testing (NDT) data. NDT means we measure the road without damaging it - using sensors, radar, and instruments.
+
+This project builds a machine learning system that predicts the future surface condition and structural health of road pavements using Non-Destructive Testing (NDT) data. NDT means we measure the road without damaging it, utilizing sensors, falling weight deflectometers, and profiling instruments.
 
 ### Why It Matters
+
 * Roads deteriorate over time due to traffic load and environmental conditions.
 * Manual inspection is time-consuming and costly.
-* This system allows road authorities to predict when a road will fail - before it actually fails.
+* This system allows road authorities to evaluate road health algorithmically at scale.
 * Enables proactive maintenance instead of reactive repair.
 
 ### Two-Model Architecture
-The system uses two separate ML models that are combined into one final score:
 
-| Model | Input | Output |
-|-------|-------|--------|
-| **Model 1** | Road roughness + traffic load over time | Predicted future IRI + RUL (years) |
-| **Model 2** | FWD deflection measurements | Structural health (Good/Fair/Poor) |
-| **RHI** | IRI Score + FWD Score | Single health score (0-100) |
+The system employs a dual-track machine learning architecture (supervised and unsupervised) that fuses surface roughness and structural integrity into a single, comprehensive Road Health Index (RHI).
 
 ---
 
 ## 2. Datasets
+
 All data comes from the LTPP (Long-Term Pavement Performance) database maintained by the US Federal Highway Administration (FHWA).
 
 **Common Key Columns:**
+
 * `SHRP_ID`: Unique road section identifier (e.g., 0101, 0102)
 * `STATE_CODE`: US state number (1 = Alabama)
 * `CONSTRUCTION_NO`: Construction version of that section (1 = original, 2 = after repair)
@@ -36,27 +38,34 @@ All data comes from the LTPP (Long-Term Pavement Performance) database maintaine
 ---
 
 ## 3. Model 1 - IRI + Traffic (Surface Deterioration)
-**Purpose**: Predict the future IRI (road roughness at next measurement) and derive RUL (Remaining Useful Life in years) from it.
 
-**Algorithm**: XGBoost Regressor ($R^2$ Score: 0.9411)
+**Purpose**: Predict the future International Roughness Index (IRI) of a road section and convert that prediction into a normalized 0-100 IRI Score.
+
+**Algorithm**: XGBoost Regressor (Supervised Learning)
+
+**Data Engineering**: Implements forward-fill imputation for temporal traffic trends to prevent data loss and retain maximum training records.
 
 **Features Used**:
+
 * `MRI` (Current road roughness)
 * `AADTT_ALL_TRUCKS_TREND` (Daily truck count)
 * `ANNUAL_TRUCK_VOLUME_TREND` (Yearly total truck volume)
 * `ANNUAL_ESAL_TREND` (Yearly damage load)
-* `CUMULATIVE_ESAL` (Engineered: Total damage since road built)
-* `IRI_GROWTH_RATE` (Engineered: Rate of IRI increase per year)
+* `CUMULATIVE_ESAL` (Engineered: Total damage load since the road was built)
 * `YEAR` (Year of measurement)
 
 ---
 
 ## 4. Model 2 - FWD (Structural Health)
-**Purpose**: Classify the structural health of a road section as Good, Fair, or Poor based on FWD deflection measurements and pavement type.
 
-**Algorithm**: XGBoost Classifier (Accuracy: 0.9982)
+**Purpose**: Discover structural health patterns and assign Good, Fair, or Poor classifications dynamically based on Falling Weight Deflectometer (FWD) measurements.
+
+**Algorithm**: K-Means Clustering (Unsupervised Learning)
+
+**Data Engineering**: Replaced the original supervised classifier with an unsupervised clustering model to completely eliminate data leakage. Measurements are standardized using `StandardScaler` to naturally group roads by structural similarity via centroid analysis.
 
 **Features Used**:
+
 * `PEAK_DEFL_1` to `PEAK_DEFL_7` (Deflections at varying sensor distances)
 * `DROP_LOAD` (Load applied during test)
 * `DROP_HEIGHT` (Height of drop 1-4)
@@ -66,10 +75,17 @@ All data comes from the LTPP (Long-Term Pavement Performance) database maintaine
 ---
 
 ## 5. RHI - Road Health Index
+
 **Purpose**: Combine Model 1 (surface condition) and Model 2 (structural health) into a single score (0-100) that represents overall road health.
 
+**Dynamic Fallback Architecture**:
+The system is built for real-world scalability. It utilizes a Left Join to evaluate all road sections.
+
+* If both IRI and FWD data are present: **RHI = 50% IRI Score + 50% FWD Score**.
+* If FWD data is missing (due to incomplete sensor records): **RHI = 100% IRI Score** (Dynamic Fallback Engaged).
+
 | RHI Score | Condition | Recommended Action |
-|-----------|-----------|--------------------|
+| --- | --- | --- |
 | 75-100 | Good | Routine maintenance only |
 | 50-74 | Fair | Schedule repairs in near future |
 | 0-49 | Poor | Immediate attention required |
@@ -77,15 +93,17 @@ All data comes from the LTPP (Long-Term Pavement Performance) database maintaine
 ---
 
 ## 6. How to Use for a New Road
-To predict RHI for any new road, run the RHI predictor and provide the required IRI, traffic, and FWD inputs when prompted. 
+
+To predict the RHI for any new road, execute the interactive RHI predictor script. You will be prompted to provide the required IRI and traffic data. The script will then ask if FWD structural data is available; if you select "no", the system will automatically engage the dynamic fallback logic and output the final index.
 
 ---
 
 ## 7. Glossary
+
 * **NDT**: Non-Destructive Testing
-* **IRI**: International Roughness Index ($m/km$)
+* **IRI**: International Roughness Index (m/km)
 * **FWD**: Falling Weight Deflectometer
-* **RUL**: Remaining Useful Life
 * **RHI**: Road Health Index
 * **ESAL**: Equivalent Single Axle Load
 * **LTPP**: Long-Term Pavement Performance
+* **K-Means**: An unsupervised machine learning algorithm used to cluster unlabeled data.
