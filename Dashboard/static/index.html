@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Road Health Index | Control Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/form-helpers.css">
+  <link rel="stylesheet" href="/advanced.css">
+</head>
+<body>
+  <header><div><p class="eyebrow">PAVEMENT INTELLIGENCE PLATFORM</p><h1>Road Health Index</h1></div><div id="network-status" class="network-status">Loading network...</div></header>
+  <main>
+    <aside class="sidebar">
+      <section><p class="eyebrow">SECTION LOOKUP</p><h2>Find a road segment</h2>
+        <div class="search-wrap"><input id="section-search" placeholder="SHRP_ID or State code"><div id="search-results" class="results"></div></div>
+        <p id="selected-section" class="muted">Search to load a section's historic values.</p>
+      </section>
+      <form id="predictor-form"><p class="eyebrow">PREDICT CURRENT CONDITION</p><h2>Surface & traffic</h2>
+        <div class="fields">
+          <label>Current IRI / MRI <input id="mri" type="number" min="0" max="10" step="0.01" placeholder="e.g., 0.85" required><small>0–10 m/km · smooth: &lt;1.5, failed: &gt;2.5</small></label>
+          <label>Daily truck count <input id="aadtt" type="number" min="0" max="50000" step="1" placeholder="e.g., 950" required><small>0–50,000 vehicles/day</small></label>
+          <label>Annual truck volume <input id="truck-volume" type="number" min="0" max="20000000" step="1" placeholder="e.g., 346750" required><small>0–20,000,000 vehicles/year</small></label>
+          <label>Annual ESAL <input id="annual-esal" type="number" min="0" max="50000000" step="1" placeholder="e.g., 310000" required><small>0–50,000,000 ESAL</small></label>
+          <label>Cumulative ESAL <input id="cumulative-esal" type="number" min="0" max="500000000" step="1" placeholder="e.g., 1500000" required><small>0–500,000,000 ESAL</small></label>
+          <label>Measurement year <input id="year" type="number" min="1980" max="2030" step="1" placeholder="e.g., 2025" required><small>1980–2030</small></label>
+        </div>
+        <div class="toggle-row"><span>FWD structural data available</span><label class="switch"><input id="fwd-available" type="checkbox" checked><span></span></label></div>
+        <div id="fwd-fields"><h2>FWD structural data</h2><div class="deflections" id="deflection-inputs"></div>
+          <div class="fields"><label>Drop load <input id="drop-load" type="number" min="0" max="2000" step="0.1" placeholder="e.g., 710" required><small>0–200 kN; source-model scale allows 710</small></label><label>Drop height <input id="drop-height" type="number" min="1" max="4" step="1" placeholder="e.g., 4" required><small>Discrete positions: 1, 2, 3, or 4</small></label><label>Pavement family <select id="pavement-family" required></select><small>ACTB or ACUB</small></label><label>Lane type <select id="lane-no" required></select><small>F1 or F3</small></label></div>
+        </div>
+        <button class="primary" type="submit">Update live prediction</button>
+      </form>
+    </aside>
+    <section class="content">
+      <div id="fallback-badge" class="fallback hidden">Fallback active · RHI based 100% on IRI</div>
+      <div class="hero-grid"><article class="score-card"><p class="eyebrow">FINAL ROAD HEALTH INDEX</p><div class="gauge"><svg viewBox="0 0 200 115"><path class="gauge-track" d="M 15 100 A 85 85 0 0 1 185 100"/><path id="gauge-fill" class="gauge-fill" d="M 15 100 A 85 85 0 0 1 185 100"/></svg><div><strong id="rhi-score">--</strong><span>/ 100</span></div></div><h2 id="condition">Awaiting data</h2><p id="recommendation" class="muted">Load a road section or run a what-if simulation.</p></article>
+        <article class="component-card"><p class="eyebrow">COMPONENT BREAKDOWN</p><canvas id="component-chart"></canvas><div class="metric-row"><span>Predicted future IRI</span><strong id="future-iri">--</strong></div><div class="metric-row"><span>FWD health</span><strong id="fwd-health">--</strong></div></article>
+      </div>
+      <div class="chart-grid"><article><p class="eyebrow">DETERIORATION TIMELINE</p><h2>Historical and 10-year IRI projection</h2><canvas id="iri-chart"></canvas></article><article><p class="eyebrow">STRUCTURAL RESPONSE</p><h2>Deflection basin + indicative interval</h2><canvas id="basin-chart"></canvas></article><article><p class="eyebrow">NETWORK OVERVIEW</p><h2>Road condition distribution</h2><canvas id="network-chart"></canvas></article><article><p class="eyebrow">NETWORK STRESS MAP</p><h2>Traffic volume vs. RHI</h2><canvas id="scatter-chart"></canvas></article></div>
+      <section class="batch"><div><p class="eyebrow">BATCH ASSESSMENT</p><h2>Score up to 50 road sections</h2><p class="muted">Upload CSV or Excel with: MRI, AADTT_ALL_TRUCKS_TREND, ANNUAL_TRUCK_VOLUME_TREND, ANNUAL_ESAL_TREND, CUMULATIVE_ESAL, YEAR.</p></div><div><input id="batch-file" type="file" accept=".csv,.xlsx,.xls"><button id="batch-button" class="secondary">Upload & download results</button></div></section>
+      <section class="export"><div><p class="eyebrow">REPORTING</p><h2>Export this assessment</h2></div><div><button id="csv-button" class="secondary">Download CSV</button><button id="pdf-button" class="primary">Download PDF</button></div></section>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
