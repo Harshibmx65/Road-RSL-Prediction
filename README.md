@@ -98,7 +98,34 @@ To predict the RHI for any new road, execute the interactive RHI predictor scrip
 
 ---
 
-## 7. Glossary
+## 7. Road Health Index Dashboard
+
+The project includes a FastAPI dashboard that reads the existing `data` and `models` artifacts without modifying them.
+
+### Run the dashboard
+
+From the project root, create and activate a virtual environment, install the unified dependencies, then start the dashboard:
+
+```powershell
+python -m pip install -r requirements.txt
+python -m uvicorn Dashboard.main:app --reload --port 8000
+```
+
+Open <http://127.0.0.1:8000>. Interactive API documentation is available at <http://127.0.0.1:8000/docs>.
+
+### REST endpoints
+
+* `GET /api/sections?search=0101` — section search
+* `GET /api/section/{shrp_id}?state_code={state}` — historical records, defaults, and prediction
+* `GET /api/network-summary` — condition distribution
+* `POST /api/predict` — live what-if prediction
+* `POST /api/report.csv` — download a prediction report
+
+The dashboard generates formatted PDFs client-side. MySQL is not needed for local use because the dashboard reads the existing Excel source data. A database adapter is only needed for persistent user accounts, saved scenarios, or multi-user deployment.
+
+---
+
+## 8. Glossary
 
 * **NDT**: Non-Destructive Testing
 * **IRI**: International Roughness Index (m/km)
