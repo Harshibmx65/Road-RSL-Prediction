@@ -1,5 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-let componentChart, iriChart, basinChart, networkChart, scatterChart;
+let componentChart, iriChart, networkChart;
 let currentResult = null;
 let currentHistory = [];
 let currentBasin = null;
@@ -15,7 +15,7 @@ function chartOptions(extra = {}) {
 function renderCharts() {
   const result = currentResult;
   if (!result) return;
-  componentChart?.destroy(); iriChart?.destroy(); basinChart?.destroy();
+  componentChart?.destroy(); iriChart?.destroy();
   componentChart = new Chart($('#component-chart'), {
     type: 'bar', data: { labels: ['IRI surface score', 'FWD structural score'], datasets: [{ data: [result.iri_score, result.fwd_score ?? 0], backgroundColor: ['#267a62', result.fwd_score === null ? '#d5dfd8' : '#548bdf'], borderRadius: 6 }] },
     options: chartOptions({ scales: { y: { min: 0, max: 100, grid: { color: '#edf1ee' } }, x: { grid: { display: false } } }, plugins: { legend: { display: false } } })
@@ -28,13 +28,6 @@ function renderCharts() {
       { label: 'Projected IRI', data: [{ x: finalYear, y: Number($('#mri').value) }, ...result.projection.map((point) => ({ x: point.year, y: point.iri }))], borderColor: '#ee8b2d', borderDash: [6, 5], tension: .2, pointRadius: 3 },
       { label: 'Failure threshold', data: [{ x: historic[0]?.x ?? finalYear - 2, y: 2.5 }, { x: result.projection.at(-1)?.year ?? finalYear + 10, y: 2.5 }], borderColor: '#dd4d43', borderDash: [3, 4], pointRadius: 0 },
     ] }, options: chartOptions({ scales: { x: { type: 'linear', ticks: { precision: 0 }, grid: { display: false } }, y: { title: { display: true, text: 'IRI (m/km)' }, grid: { color: '#edf1ee' } } } })
-  });
-  const basin = currentBasin || getDeflections();
-  const lower = currentConfidence?.lower || basin.map((value) => value * .9);
-  const upper = currentConfidence?.upper || basin.map((value) => value * 1.1);
-  basinChart = new Chart($('#basin-chart'), {
-    type: 'line', data: { labels: ['0', '200', '300', '450', '600', '900', '1200'], datasets: [{ label: 'Lower interval', data: lower, borderColor: 'transparent', pointRadius: 0 }, { label: 'Indicative range', data: upper, borderColor: 'transparent', backgroundColor: 'rgba(84,139,223,.15)', fill: '-1', pointRadius: 0 }, { label: 'Peak deflection', data: basin, borderColor: '#548bdf', tension: .35, pointRadius: 3 }] },
-    options: chartOptions({ scales: { x: { title: { display: true, text: 'Sensor distance (mm)' }, grid: { display: false } }, y: { title: { display: true, text: 'Deflection' }, grid: { color: '#edf1ee' } } } })
   });
 }
 
@@ -120,8 +113,6 @@ async function loadNetwork() {
   $('#network-status').textContent = `${data.total_sections.toLocaleString()} road sections monitored`;
   networkChart?.destroy();
   networkChart = new Chart($('#network-chart'), { type: 'doughnut', data: { labels: ['Good', 'Fair', 'Poor'], datasets: [{ data: ['Good', 'Fair', 'Poor'].map((key) => data.conditions[key]), backgroundColor: [palette.Good, palette.Fair, palette.Poor], borderWidth: 0 }] }, options: chartOptions({ cutout: '70%' }) });
-  scatterChart?.destroy();
-  scatterChart = new Chart($('#scatter-chart'), { type: 'scatter', data: { datasets: ['Good', 'Fair', 'Poor'].map((status) => ({ label: status, data: data.points.filter((point) => point.condition === status).map((point) => ({ x: point.annual_truck_volume, y: point.rhi })), backgroundColor: palette[status] })) }, options: chartOptions({ scales: { x: { title: { display: true, text: 'Annual truck volume' } }, y: { min: 0, max: 100, title: { display: true, text: 'Final RHI score' } } } }) });
 }
 
 async function loadMetadata() {
