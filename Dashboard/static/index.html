@@ -43,6 +43,7 @@
       <div class="chart-grid"><article><p class="eyebrow">DETERIORATION TIMELINE</p><h2>Historical and 10-year IRI projection</h2><canvas id="iri-chart"></canvas></article><article><p class="eyebrow">NETWORK OVERVIEW</p><h2>Road condition distribution</h2><canvas id="network-chart"></canvas></article></div>
       <section class="batch"><div><p class="eyebrow">BATCH ASSESSMENT</p><h2>Score up to 50 road sections</h2><p class="muted">Upload CSV or Excel with: MRI, AADTT_ALL_TRUCKS_TREND, ANNUAL_TRUCK_VOLUME_TREND, ANNUAL_ESAL_TREND, CUMULATIVE_ESAL, YEAR.</p></div><div><input id="batch-file" type="file" accept=".csv,.xlsx,.xls"><button id="batch-button" class="secondary">Upload & download results</button></div></section>
       <section class="export"><div><p class="eyebrow">REPORTING</p><h2>Export this assessment</h2></div><div><button id="csv-button" class="secondary">Download CSV</button><button id="pdf-button" class="primary">Download PDF</button></div></section>
+      <section class="tester"><div><p class="eyebrow">TEST RHI PREDICTOR</p><h2>Run the notebook sample verification</h2><p class="muted">This uses the same sample profile from the Test RHI Predictor notebook to verify the live dashboard model in a self-contained way.</p></div><div class="tester-actions"><button id="test-rhi-button" class="secondary">Run sample test</button><div id="test-rhi-result" class="test-result muted">No test run yet.</div></div></section>
     </section>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>

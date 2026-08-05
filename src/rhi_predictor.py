@@ -76,12 +76,23 @@ def main():
             # Scale features and predict cluster
             fwd_scaled = scaler_fwd.transform(fwd_input)
             cluster = kmeans_fwd.predict(fwd_scaled)[0]
-            
             health = health_mapping[cluster]
-            fwd_score = {'Good': 100, 'Fair': 60, 'Poor': 20}[health]
+            
+            # --- NEW CONTINUOUS SCORING ---
+            reverse_mapping = {v: k for k, v in health_mapping.items()}
+            good_cluster_idx = reverse_mapping['Good']
+            poor_cluster_idx = reverse_mapping['Poor']
+            
+            distances = kmeans_fwd.transform(fwd_scaled)
+            dist_to_good = float(distances[0, good_cluster_idx])
+            dist_to_poor = float(distances[0, poor_cluster_idx])
+            
+            fwd_score = (dist_to_poor / (dist_to_good + dist_to_poor)) * 100
+            # ------------------------------
             
             rhi = (iri_score + fwd_score) / 2
-            fwd_display = f"{health} ({fwd_score}/100)"
+            fwd_display = f"{health} ({fwd_score:.2f}/100)"
+            
         except ValueError as e:
             print(f"\nError encoding categorical data: {e}")
             print("Falling back to IRI-only RHI score due to invalid input.")

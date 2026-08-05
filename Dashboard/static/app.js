@@ -145,6 +145,27 @@ function downloadPdf() {
   pdf.setTextColor(104, 128, 120); pdf.setFontSize(8); pdf.text(`Generated ${new Date().toLocaleString()}`, 15, 285); pdf.save('road-health-report.pdf');
 }
 
+async function runNotebookSampleTest() {
+  const sample = {
+    mri: 0.85,
+    aadtt: 950,
+    annual_truck_volume: 346750,
+    annual_esal: 310000,
+    cumulative_esal: 1500000,
+    year: 2025,
+    fwd_available: true,
+    deflections: [450, 280, 210, 180, 140, 110, 70],
+    drop_load: 710,
+    drop_height: 4,
+    pavement_family: 'ACUB',
+    lane_no: 'F3',
+  };
+  const response = await fetch('/api/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sample) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || 'Sample test failed');
+  $('#test-rhi-result').innerHTML = `Sample test complete · RHI ${data.rhi.toFixed(1)} / 100 · ${data.condition} condition · future IRI ${data.predicted_future_iri.toFixed(3)} m/km`;
+}
+
 function initializeDeflections() {
   $('#deflection-inputs').innerHTML = Array.from({ length: 7 }, (_, index) => {
     const isCenter = index === 0;
@@ -161,5 +182,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('#predictor-form').addEventListener('submit', (event) => { event.preventDefault(); currentHistory = []; currentBasin = null; currentConfidence = null; requestPrediction().catch(showError); });
   $('#csv-button').addEventListener('click', () => downloadCsv().catch(showError)); $('#pdf-button').addEventListener('click', downloadPdf);
   $('#batch-button').addEventListener('click', () => uploadBatch().catch(showError));
+  $('#test-rhi-button').addEventListener('click', () => runNotebookSampleTest().catch(showError));
   try { await Promise.all([loadMetadata(), loadNetwork()]); } catch (error) { showError(error); }
 });
