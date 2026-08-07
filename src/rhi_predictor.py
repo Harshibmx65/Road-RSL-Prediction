@@ -26,20 +26,26 @@ def main():
         print("Error: Model files not found. Please run train_model1.py and train_model2.py first.")
         return
 
-    # IRI and traffic inputs
-    print("--- Section 1: Surface & Traffic Data ---")
+    # IRI, traffic, and climate inputs
+    print("--- Section 1: Surface, Traffic & Climate Data ---")
     mri = float(input('Current IRI/MRI (e.g. 0.85): '))
     aadtt = float(input('Daily Truck Count AADTT (e.g. 950): '))
     annual_truck_vol = float(input('Annual Truck Volume (e.g. 346750): '))
     annual_esal = float(input('Annual ESAL (e.g. 310000): '))
     cumulative_esal = float(input('Cumulative ESAL (e.g. 1500000): '))
     year = float(input('Current Year (e.g. 2025): '))
+    
+    # --- NEW CLIMATE INPUTS ---
+    mean_temp = float(input('Mean Annual Temperature (C) (e.g. 15.5): '))
+    freeze_index = float(input('Annual Freeze Index (e.g. 10): '))
+    freeze_thaw = float(input('Annual Freeze-Thaw Cycles (e.g. 45): '))
 
     features1 = ['MRI', 'AADTT_ALL_TRUCKS_TREND', 'ANNUAL_TRUCK_VOLUME_TREND', 
-                 'ANNUAL_ESAL_TREND', 'CUMULATIVE_ESAL', 'YEAR']
+                 'ANNUAL_ESAL_TREND', 'CUMULATIVE_ESAL', 'YEAR',
+                 'MEAN_ANN_TEMP_AVG', 'FREEZE_INDEX_YR', 'FREEZE_THAW_YR']
 
     iri_input = pd.DataFrame([[mri, aadtt, annual_truck_vol, annual_esal, 
-                               cumulative_esal, year]], columns=features1)
+                               cumulative_esal, year, mean_temp, freeze_index, freeze_thaw]], columns=features1)
 
     predicted_iri = float(model1.predict(iri_input)[0])
     failure_threshold = 2.5

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import os
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,7 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from xgboost import DMatrix
 
 
@@ -31,6 +32,7 @@ SECTION_COLUMNS = ["SHRP_ID", "STATE_CODE", "CONSTRUCTION_NO"]
 IRI_FEATURES = [
     "MRI", "AADTT_ALL_TRUCKS_TREND", "ANNUAL_TRUCK_VOLUME_TREND",
     "ANNUAL_ESAL_TREND", "CUMULATIVE_ESAL", "YEAR",
+    "MEAN_ANN_TEMP_AVG", "FREEZE_INDEX_YR", "FREEZE_THAW_YR",
 ]
 FWD_FEATURES = [
     "PEAK_DEFL_1", "PEAK_DEFL_2", "PEAK_DEFL_3", "PEAK_DEFL_4", "PEAK_DEFL_5",
@@ -48,6 +50,9 @@ class PredictionInput(BaseModel):
     annual_esal: float = Field(..., ge=0, le=50_000_000)
     cumulative_esal: float = Field(..., ge=0, le=500_000_000)
     year: int = Field(..., ge=1980, le=2030)
+    mean_ann_temp_avg: float = Field(..., ge=-100, le=100)
+    freeze_index_yr: float = Field(..., ge=0, le=100_000)
+    freeze_thaw_yr: float = Field(..., ge=0, le=100_000)
     fwd_available: bool = True
     deflections: list[float] | None = None
     # The model was trained with the source workbook's native scale (e.g., 710).
@@ -55,6 +60,26 @@ class PredictionInput(BaseModel):
     drop_height: int | None = Field(default=None, ge=1, le=4)
     pavement_family: str | None = None
     lane_no: str | None = None
+
+    @field_validator("year")
+    @classmethod
+    def validate_year(cls, value: int) -> int:
+        if value < 1980 or value > 2030:
+            raise ValueError("Year must be between 1980 and 2030.")
+        if value > datetime.now().year:
+            raise ValueError("Year cannot be greater than the current year.")
+        return value
+
+    @field_validator("deflections")
+    @classmethod
+    def validate_deflections(cls, value: list[float] | None) -> list[float] | None:
+        if value is None:
+            return value
+        if len(value) != 7:
+            raise ValueError("Provide exactly seven FWD deflection values.")
+        if any(item < 0 or item > 2_000 for item in value):
+            raise ValueError("Each FWD deflection must be between 0 and 2,000 microns.")
+        return value
 
 
 app = FastAPI(title="Road Health Index Dashboard", version="1.0.0")
@@ -109,12 +134,13 @@ def load_network_data() -> tuple[pd.DataFrame, pd.DataFrame]:
         iri = pd.read_excel(DATA_DIR / "MON_HSS_PROFILE_SECTION.xlsx")
         trf1 = pd.read_excel(DATA_DIR / "TRF_TREND_1.xlsx")
         trf2 = pd.read_excel(DATA_DIR / "TRF_TREND.xlsx")
+        climate = pd.read_excel(DATA_DIR / "CLM_VWS_TEMP_ANNUAL.xlsx")
         fwd = pd.read_excel(DATA_DIR / "MON_DEFL_DROP_DATA.xlsx")
         exp = pd.read_excel(DATA_DIR / "EXPERIMENT_SECTION.xlsx")
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Required source data is unavailable: {exc.filename}") from exc
 
-    for frame in (iri, trf1, trf2, fwd, exp):
+    for frame in (iri, trf1, trf2, climate, fwd, exp):
         frame["SHRP_ID"] = normalize_id(frame["SHRP_ID"])
         frame["STATE_CODE"] = frame["STATE_CODE"].astype(str).str.replace(".0", "", regex=False)
 
@@ -128,6 +154,8 @@ def load_network_data() -> tuple[pd.DataFrame, pd.DataFrame]:
         on=[*SECTION_COLUMNS, "YEAR"], how="outer",
     )
     iri_records = pd.merge(iri_clean, traffic, on=[*SECTION_COLUMNS, "YEAR"], how="inner")
+    climate_columns = ["SHRP_ID", "STATE_CODE", "YEAR", "MEAN_ANN_TEMP_AVG", "FREEZE_INDEX_YR", "FREEZE_THAW_YR"]
+    iri_records = pd.merge(iri_records, climate[climate_columns], on=["SHRP_ID", "STATE_CODE", "YEAR"], how="inner")
     iri_records = iri_records.sort_values([*SECTION_COLUMNS, "YEAR"])
     for column in ["ANNUAL_ESAL_TREND", "AADTT_ALL_TRUCKS_TREND", "ANNUAL_TRUCK_VOLUME_TREND"]:
         iri_records[column] = iri_records.groupby(SECTION_COLUMNS)[column].ffill()
@@ -145,7 +173,8 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
     artifacts = load_artifacts()
     iri_input = pd.DataFrame([[
         payload.mri, payload.aadtt, payload.annual_truck_volume, payload.annual_esal,
-        payload.cumulative_esal, payload.year,
+        payload.cumulative_esal, payload.year, payload.mean_ann_temp_avg,
+        payload.freeze_index_yr, payload.freeze_thaw_yr,
     ]], columns=IRI_FEATURES)
     future_iri = float(artifacts["iri_model"].predict(iri_input)[0])
     iri_score = float(np.clip(((FAILURE_THRESHOLD - future_iri) / FAILURE_THRESHOLD) * 100, 0, 100))
@@ -187,7 +216,8 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
     for offset in range(1, 11):
         future_year = payload.year + offset
         future_input = pd.DataFrame([[projected_iri, payload.aadtt, payload.annual_truck_volume,
-            payload.annual_esal, payload.cumulative_esal + payload.annual_esal * offset, future_year]], columns=IRI_FEATURES)
+            payload.annual_esal, payload.cumulative_esal + payload.annual_esal * offset, future_year,
+            payload.mean_ann_temp_avg, payload.freeze_index_yr, payload.freeze_thaw_yr]], columns=IRI_FEATURES)
         projected_iri = float(artifacts["iri_model"].predict(future_input)[0])
         projection.append({"year": future_year, "iri": round(projected_iri, 3), "iri_score": round(float(np.clip(((FAILURE_THRESHOLD - projected_iri) / FAILURE_THRESHOLD) * 100, 0, 100)), 2)})
     return {
@@ -247,7 +277,9 @@ def section_detail(shrp_id: str, state_code: str = Query(...)) -> dict[str, Any]
         "mri": float(latest["MRI"]), "aadtt": float(latest["AADTT_ALL_TRUCKS_TREND"]),
         "annual_truck_volume": float(latest["ANNUAL_TRUCK_VOLUME_TREND"]),
         "annual_esal": float(latest["ANNUAL_ESAL_TREND"]), "cumulative_esal": float(latest["CUMULATIVE_ESAL"]),
-        "year": int(latest["YEAR"]), "fwd_available": fwd_available,
+        "year": int(latest["YEAR"]), "mean_ann_temp_avg": float(latest["MEAN_ANN_TEMP_AVG"]),
+        "freeze_index_yr": float(latest["FREEZE_INDEX_YR"]), "freeze_thaw_yr": float(latest["FREEZE_THAW_YR"]),
+        "fwd_available": fwd_available,
     }
     basin: list[float] | None = None
     if fwd_available:

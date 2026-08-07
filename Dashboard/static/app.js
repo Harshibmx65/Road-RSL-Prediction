@@ -55,6 +55,7 @@ function setValue(id, value) { if (value !== undefined && value !== null) $(id).
 function fillForm(values) {
   setValue('#mri', values.mri); setValue('#aadtt', values.aadtt); setValue('#truck-volume', values.annual_truck_volume);
   setValue('#annual-esal', values.annual_esal); setValue('#cumulative-esal', values.cumulative_esal); setValue('#year', values.year);
+  setValue('#mean-ann-temp', values.mean_ann_temp_avg); setValue('#freeze-index', values.freeze_index_yr); setValue('#freeze-thaw', values.freeze_thaw_yr);
   $('#fwd-available').checked = values.fwd_available;
   toggleFwd();
   (values.deflections || []).forEach((value, index) => setValue(`#defl-${index + 1}`, value));
@@ -62,11 +63,38 @@ function fillForm(values) {
   setValue('#pavement-family', values.pavement_family); setValue('#lane-no', values.lane_no);
 }
 
+function validateNumericInputs() {
+  const currentYear = new Date().getFullYear();
+  const numericInputs = Array.from($('#predictor-form').querySelectorAll('input[type="number"]'));
+  numericInputs.forEach((input) => {
+    if (!input.value) return;
+    const value = Number(input.value);
+    if (!Number.isFinite(value)) throw new Error(`${input.id} must be a valid number.`);
+    if (input.id === 'year') {
+      if (value < 1980 || value > 2030 || value > currentYear) {
+        throw new Error(`Measurement year must be between 1980 and ${currentYear}.`);
+      }
+      return;
+    }
+    const min = input.getAttribute('min');
+    const max = input.getAttribute('max');
+    if (min !== null && value < Number(min)) {
+      throw new Error(`${input.id.replace(/-/g, ' ')} must be at least ${min}.`);
+    }
+    if (max !== null && value > Number(max)) {
+      throw new Error(`${input.id.replace(/-/g, ' ')} must be at most ${max}.`);
+    }
+  });
+}
+
 function payload() {
   const fwdAvailable = $('#fwd-available').checked;
+  validateNumericInputs();
+  const year = Number($('#year').value);
   return {
     mri: Number($('#mri').value), aadtt: Number($('#aadtt').value), annual_truck_volume: Number($('#truck-volume').value),
-    annual_esal: Number($('#annual-esal').value), cumulative_esal: Number($('#cumulative-esal').value), year: Number($('#year').value),
+    annual_esal: Number($('#annual-esal').value), cumulative_esal: Number($('#cumulative-esal').value), year,
+    mean_ann_temp_avg: Number($('#mean-ann-temp').value), freeze_index_yr: Number($('#freeze-index').value), freeze_thaw_yr: Number($('#freeze-thaw').value),
     fwd_available: fwdAvailable,
     ...(fwdAvailable ? { deflections: getDeflections(), drop_load: Number($('#drop-load').value), drop_height: Number($('#drop-height').value), pavement_family: $('#pavement-family').value, lane_no: $('#lane-no').value } : {})
   };
@@ -153,6 +181,9 @@ async function runNotebookSampleTest() {
     annual_esal: 310000,
     cumulative_esal: 1500000,
     year: 2025,
+    mean_ann_temp_avg: 12.5,
+    freeze_index_yr: 3500,
+    freeze_thaw_yr: 240,
     fwd_available: true,
     deflections: [450, 280, 210, 180, 140, 110, 70],
     drop_load: 710,
@@ -163,7 +194,66 @@ async function runNotebookSampleTest() {
   const response = await fetch('/api/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sample) });
   const data = await response.json();
   if (!response.ok) throw new Error(data.detail || 'Sample test failed');
-  $('#test-rhi-result').innerHTML = `Sample test complete · RHI ${data.rhi.toFixed(1)} / 100 · ${data.condition} condition · future IRI ${data.predicted_future_iri.toFixed(3)} m/km`;
+  
+  // Professional test results with input summary
+  const html = `
+    <div class="test-professional">
+      <div class="test-summary">
+        <div class="summary-item">
+          <span>Current IRI</span>
+          <strong>${sample.mri}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Year</span>
+          <strong>${sample.year}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Daily Trucks</span>
+          <strong>${sample.aadtt}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Annual ESAL</span>
+          <strong>${sample.annual_esal.toLocaleString()}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Mean Temp</span>
+          <strong>${sample.mean_ann_temp_avg}°C</strong>
+        </div>
+        <div class="summary-item">
+          <span>Deflections</span>
+          <strong>${sample.deflections[0]}–${sample.deflections[6]} μm</strong>
+        </div>
+      </div>
+      
+      <div class="test-primary-result" style="border-top-color: ${palette[data.condition]}">
+        <div class="rhi-display">
+          <p>Road Health Index</p>
+          <h2>${data.rhi.toFixed(1)}<span>/100</span></h2>
+          <div class="condition-badge" style="background: ${palette[data.condition]}">
+            <span>${data.condition.toUpperCase()}</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="test-scores">
+        <div class="score-item">
+          <p>Surface Score</p>
+          <h3>${data.iri_score.toFixed(1)}</h3>
+        </div>
+        <div class="score-item">
+          <p>Structural Score</p>
+          <h3>${data.fwd_score !== null ? data.fwd_score.toFixed(1) : '—'}</h3>
+        </div>
+        <div class="score-item">
+          <p>Predicted IRI</p>
+          <h3>${data.predicted_future_iri.toFixed(3)}</h3>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  $('#test-rhi-result').innerHTML = html;
+  $('#test-rhi-result').classList.remove('hidden');
 }
 
 function initializeDeflections() {
@@ -175,8 +265,25 @@ function initializeDeflections() {
   }).join('');
 }
 
+function initializeRangeValidation() {
+  const form = $('#predictor-form');
+  const numericInputs = Array.from(form.querySelectorAll('input[type="number"]'));
+  numericInputs.forEach((input) => {
+    input.addEventListener('blur', () => {
+      if (!input.value) return;
+      const value = Number(input.value);
+      const min = input.getAttribute('min') ? Number(input.getAttribute('min')) : -Infinity;
+      const max = input.getAttribute('max') ? Number(input.getAttribute('max')) : Infinity;
+      if (value < min || value > max) {
+        showError(new Error(`${input.id.replace(/-/g, ' ')} must be between ${min === -Infinity ? '0' : min} and ${max === Infinity ? 'unlimited' : max}.`));
+        input.value = Math.max(min, Math.min(max, value));
+      }
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
-  initializeDeflections(); toggleFwd();
+  initializeDeflections(); toggleFwd(); initializeRangeValidation();
   $('#fwd-available').addEventListener('change', toggleFwd);
   $('#section-search').addEventListener('input', () => { clearTimeout(window.searchTimer); window.searchTimer = setTimeout(searchSections, 220); });
   $('#predictor-form').addEventListener('submit', (event) => { event.preventDefault(); currentHistory = []; currentBasin = null; currentConfidence = null; requestPrediction().catch(showError); });

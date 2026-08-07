@@ -10,42 +10,46 @@
 
 ### What This Project Does
 
-This project builds a machine learning system that predicts the future surface condition and structural health of road pavements using Non-Destructive Testing (NDT) data. NDT means we measure the road without damaging it, utilizing sensors, falling weight deflectometers, and profiling instruments.
+This project builds a machine learning system that predicts the future surface condition and structural health of road pavements using Non-Destructive Testing (NDT) data and environmental climate stressors. NDT means we measure the road without damaging it, utilizing sensors, falling weight deflectometers, and profiling instruments.
 
 ### Why It Matters
 
-* Roads deteriorate over time due to traffic load and environmental conditions.
+* Roads deteriorate over time due to traffic load and environmental conditions (like freeze-thaw cycles).
 * Manual inspection is time-consuming and costly.
 * This system allows road authorities to evaluate road health algorithmically at scale.
 * Enables proactive maintenance instead of reactive repair.
 
 ### Two-Model Architecture
 
-The system employs a dual-track machine learning architecture (supervised and unsupervised) that fuses surface roughness and structural integrity into a single, comprehensive Road Health Index (RHI).
+The system employs a dual-track machine learning architecture (supervised and unsupervised) that fuses surface roughness, environmental wear, and structural integrity into a single, comprehensive Road Health Index (RHI).
 
 ---
 
 ## 2. Datasets
 
-All data comes from the LTPP (Long-Term Pavement Performance) database maintained by the US Federal Highway Administration (FHWA).
+All data comes from the LTPP (Long-Term Pavement Performance) database maintained by the US Federal Highway Administration (FHWA) and Virtual Weather Station (VWS) climate datasets.
 
 **Common Key Columns:**
 
 * `SHRP_ID`: Unique road section identifier (e.g., 0101, 0102)
 * `STATE_CODE`: US state number (1 = Alabama)
 * `CONSTRUCTION_NO`: Construction version of that section (1 = original, 2 = after repair)
+* `YEAR`: Temporal key used to synchronize traffic and climate stress with physical road scans
 
 ---
 
-## 3. Model 1 - IRI + Traffic (Surface Deterioration)
+## 3. Model 1 - IRI, Traffic & Climate (Surface Deterioration)
 
-**Purpose**: Predict the future International Roughness Index (IRI) of a road section and convert that prediction into a normalized 0-100 IRI Score.
+**Purpose**: Predict the future International Roughness Index (IRI) of a road section based on historical wear and environmental stressors, and convert that prediction into a normalized 0-100 IRI Score.
 
 **Algorithm**: XGBoost Regressor (Supervised Learning)
 
-**Data Engineering**: Implements forward-fill imputation for temporal traffic trends to prevent data loss and retain maximum training records.
+**Data Engineering**:
 
-**Features Used**:
+* Implements forward-fill imputation for temporal traffic trends to prevent data loss and retain maximum training records.
+* Performs highly accurate inner joins on geographical and temporal keys to perfectly align annual temperature metrics with physical road scans.
+
+**Features Used (9 Total)**:
 
 * `MRI` (Current road roughness)
 * `AADTT_ALL_TRUCKS_TREND` (Daily truck count)
@@ -53,6 +57,9 @@ All data comes from the LTPP (Long-Term Pavement Performance) database maintaine
 * `ANNUAL_ESAL_TREND` (Yearly damage load)
 * `CUMULATIVE_ESAL` (Engineered: Total damage load since the road was built)
 * `YEAR` (Year of measurement)
+* `MEAN_ANN_TEMP_AVG` (Mean Annual Temperature)
+* `FREEZE_INDEX_YR` (Annual Freeze Index)
+* `FREEZE_THAW_YR` (Annual Freeze-Thaw Cycles)
 
 ---
 
@@ -76,7 +83,7 @@ All data comes from the LTPP (Long-Term Pavement Performance) database maintaine
 
 ## 5. RHI - Road Health Index
 
-**Purpose**: Combine Model 1 (surface condition) and Model 2 (structural health) into a single score (0-100) that represents overall road health.
+**Purpose**: Combine Model 1 (surface & climate condition) and Model 2 (structural health) into a single score (0-100) that represents overall road health.
 
 **Dynamic Fallback Architecture**:
 The system is built for real-world scalability. It utilizes a Left Join to evaluate all road sections.
@@ -94,7 +101,7 @@ The system is built for real-world scalability. It utilizes a Left Join to evalu
 
 ## 6. How to Use for a New Road
 
-To predict the RHI for any new road, execute the interactive RHI predictor script. You will be prompted to provide the required IRI and traffic data. The script will then ask if FWD structural data is available; if you select "no", the system will automatically engage the dynamic fallback logic and output the final index.
+To predict the RHI for any new road, execute the interactive RHI predictor script. You will be prompted to provide the required IRI, traffic, and environmental climate data (like freeze-thaw cycles and temperature averages). The script will then ask if FWD structural data is available; if you select "no", the system will automatically engage the dynamic fallback logic and output the final index based purely on surface and climate wear.
 
 ---
 
@@ -109,9 +116,10 @@ From the project root, create and activate a virtual environment, install the un
 ```powershell
 python -m pip install -r requirements.txt
 python -m uvicorn Dashboard.main:app --reload --port 8000
+
 ```
 
-Open <http://127.0.0.1:8000>. Interactive API documentation is available at <http://127.0.0.1:8000/docs>.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Interactive API documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
 ### REST endpoints
 
