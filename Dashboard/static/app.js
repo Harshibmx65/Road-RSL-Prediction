@@ -104,15 +104,15 @@ function toggleFwd() { $('#fwd-fields').style.display = $('#fwd-available').chec
 
 async function requestPrediction() {
   const response = await fetch('/api/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload()) });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Prediction failed');
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(getErrorMessage(data, 'Prediction failed.'));
   updateResult(data);
 }
 
 async function loadSection(shrpId, stateCode) {
   const response = await fetch(`/api/section/${encodeURIComponent(shrpId)}?state_code=${encodeURIComponent(stateCode)}`);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Unable to load section');
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(getErrorMessage(data, 'Unable to load section.'));
   selectedSection = data.section;
   $('#selected-section').textContent = `Selected · SHRP ${data.section.shrp_id}, State ${data.section.state_code}, construction ${data.section.construction_no}`;
   $('#search-results').innerHTML = '';
@@ -132,12 +132,27 @@ async function searchSections() {
   document.querySelectorAll('.result[data-id]').forEach((button) => button.addEventListener('click', () => loadSection(button.dataset.id, button.dataset.state).catch(showError)));
 }
 
-function showError(error) { window.alert(error.message || String(error)); }
+function getErrorMessage(error, fallback = 'Something went wrong.') {
+  if (error == null) return fallback;
+  if (typeof error === 'string') return error || fallback;
+  if (error instanceof Error) return error.message || fallback;
+  if (Array.isArray(error)) return error.map((item) => getErrorMessage(item, 'Invalid value')).join('; ');
+  if (typeof error === 'object') {
+    if ('detail' in error) return getErrorMessage(error.detail, fallback);
+    if ('message' in error) return getErrorMessage(error.message, fallback);
+    if ('error' in error) return getErrorMessage(error.error, fallback);
+    if ('msg' in error) return getErrorMessage(error.msg, fallback);
+    try { return JSON.stringify(error); } catch { return String(error); }
+  }
+  return String(error) || fallback;
+}
+
+function showError(error) { window.alert(getErrorMessage(error, 'Something went wrong.')); }
 
 async function loadNetwork() {
   const response = await fetch('/api/network-summary');
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Network summary unavailable');
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(getErrorMessage(data, 'Network summary unavailable.'));
   $('#network-status').textContent = `${data.total_sections.toLocaleString()} road sections monitored`;
   networkChart?.destroy();
   networkChart = new Chart($('#network-chart'), { type: 'doughnut', data: { labels: ['Good', 'Fair', 'Poor'], datasets: [{ data: ['Good', 'Fair', 'Poor'].map((key) => data.conditions[key]), backgroundColor: [palette.Good, palette.Fair, palette.Poor], borderWidth: 0 }] }, options: chartOptions({ cutout: '70%' }) });
@@ -150,7 +165,8 @@ async function loadMetadata() {
 
 async function downloadCsv() {
   const response = await fetch('/api/report.csv', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload()) });
-  if (!response.ok) throw new Error((await response.json()).detail || 'CSV export failed');
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(getErrorMessage(data, 'CSV export failed.'));
   const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'road-health-report.csv'; link.click(); URL.revokeObjectURL(url);
 }
 
@@ -159,7 +175,8 @@ async function uploadBatch() {
   if (!file) throw new Error('Choose a CSV or Excel file first.');
   const form = new FormData(); form.append('file', file);
   const response = await fetch('/api/batch', { method: 'POST', body: form });
-  if (!response.ok) throw new Error((await response.json()).detail || 'Batch scoring failed');
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(getErrorMessage(data, 'Batch scoring failed.'));
   const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'batch-rhi-results.csv'; link.click(); URL.revokeObjectURL(url);
 }
 
@@ -192,8 +209,8 @@ async function runNotebookSampleTest() {
     lane_no: 'F3',
   };
   const response = await fetch('/api/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sample) });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Sample test failed');
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(getErrorMessage(data, 'Sample test failed.'));
   
   // Professional test results with input summary
   const html = `
