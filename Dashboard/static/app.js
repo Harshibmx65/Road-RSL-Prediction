@@ -191,31 +191,110 @@ function downloadPdf() {
 }
 
 async function runNotebookSampleTest() {
-  const sample = {
-    mri: 0.85,
-    aadtt: 950,
-    annual_truck_volume: 346750,
-    annual_esal: 310000,
-    cumulative_esal: 1500000,
-    year: 2025,
-    mean_ann_temp_avg: 12.5,
-    freeze_index_yr: 3500,
-    freeze_thaw_yr: 240,
-    fwd_available: true,
-    deflections: [450, 280, 210, 180, 140, 110, 70],
-    drop_load: 710,
-    drop_height: 4,
-    pavement_family: 'ACUB',
-    lane_no: 'F3',
-  };
+  const testSamples = [
+    {
+      caseName: 'Sample A',
+      mri: 0.85,
+      aadtt: 950,
+      annual_truck_volume: 346750,
+      annual_esal: 310000,
+      cumulative_esal: 1500000,
+      year: 2025,
+      mean_ann_temp_avg: 12.5,
+      freeze_index_yr: 3500,
+      freeze_thaw_yr: 240,
+      fwd_available: true,
+      deflections: [450, 280, 210, 180, 140, 110, 70],
+      drop_load: 710,
+      drop_height: 4,
+      pavement_family: 'ACUB',
+      lane_no: 'F3',
+    },
+    {
+      mri: 1.20,
+      aadtt: 1120,
+      annual_truck_volume: 420000,
+      annual_esal: 390000,
+      cumulative_esal: 1750000,
+      year: 2026,
+      mean_ann_temp_avg: 13.0,
+      freeze_index_yr: 3600,
+      freeze_thaw_yr: 250,
+      fwd_available: true,
+      deflections: [520, 330, 240, 190, 160, 120, 85],
+      drop_load: 740,
+      drop_height: 4,
+      pavement_family: 'ACSP',
+      lane_no: 'F2',
+    },
+    {
+      mri: 0.65,
+      aadtt: 820,
+      annual_truck_volume: 285000,
+      annual_esal: 240000,
+      cumulative_esal: 980000,
+      year: 2024,
+      mean_ann_temp_avg: 18.0,
+      freeze_index_yr: 1200,
+      freeze_thaw_yr: 90,
+      fwd_available: true,
+      deflections: [390, 250, 170, 135, 110, 85, 55],
+      drop_load: 690,
+      drop_height: 4,
+      pavement_family: 'ACBF',
+      lane_no: 'F3',
+    },
+    {
+      mri: 1.05,
+      aadtt: 1400,
+      annual_truck_volume: 520000,
+      annual_esal: 460000,
+      cumulative_esal: 2050000,
+      year: 2027,
+      mean_ann_temp_avg: 11.0,
+      freeze_index_yr: 4200,
+      freeze_thaw_yr: 300,
+      fwd_available: true,
+      deflections: [600, 410, 310, 250, 200, 155, 110],
+      drop_load: 760,
+      drop_height: 4,
+      pavement_family: 'ACUB',
+      lane_no: 'F1',
+    },
+    {
+      mri: 0.95,
+      aadtt: 1030,
+      annual_truck_volume: 365000,
+      annual_esal: 335000,
+      cumulative_esal: 1580000,
+      year: 2025,
+      mean_ann_temp_avg: 16.5,
+      freeze_index_yr: 3100,
+      freeze_thaw_yr: 220,
+      fwd_available: true,
+      deflections: [475, 305, 235, 185, 150, 115, 75],
+      drop_load: 725,
+      drop_height: 4,
+      pavement_family: 'ACSP',
+      lane_no: 'F2',
+    },
+  ];
+
+  const sample = testSamples[Math.floor(Math.random() * testSamples.length)];
+  console.log('Selected notebook test sample:', sample.caseName, sample);
   const response = await fetch('/api/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sample) });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(getErrorMessage(data, 'Sample test failed.'));
   
+  const sampleLabel = sample.caseName ? `${sample.caseName} (random)` : 'Random sample';
   // Professional test results with input summary
   const html = `
     <div class="test-professional">
       <div class="test-summary">
+        <div class="summary-item">
+          <span>Test Case</span>
+          <strong>${sampleLabel}</strong>
+        </div>
         <div class="summary-item">
           <span>Current IRI</span>
           <strong>${sample.mri}</strong>
