@@ -99,7 +99,13 @@ y = df_train[target]
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-model = XGBRegressor(n_estimators=200, learning_rate=0.05, max_depth=6, random_state=42)
+model = XGBRegressor(
+    n_estimators=200, 
+    learning_rate=0.05, 
+    max_depth=6, 
+    random_state=42,
+    monotone_constraints=(1, 0, 0, 0, 1, 1, 0, 0, 0)
+)
 model.fit(X_train, y_train)
 
 # Evaluate predictions
@@ -151,7 +157,8 @@ def forecast_to_present(row, target_year=CURRENT_YEAR):
     for yr in range(start_year, target_year):
         arr = np.array([[current_mri, aadtt, truck_vol, ann_esal, current_cum_esal, yr, temp, freeze_idx, freeze_thaw]], dtype=np.float32)
         dmat = DMatrix(arr, feature_names=features)
-        next_mri = float(booster.predict(dmat)[0])
+        raw_next_mri = float(booster.predict(dmat)[0])
+        next_mri = max(raw_next_mri, current_mri)
         current_mri = next_mri
         current_cum_esal += ann_esal
         

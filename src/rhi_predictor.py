@@ -122,7 +122,8 @@ def main():
                 current_cum_esal, yr, mean_temp, freeze_index, freeze_thaw
             ]], columns=features1)
             
-            next_mri = float(model1.predict(step_input)[0])
+            raw_next_mri = float(model1.predict(step_input)[0])
+            next_mri = max(raw_next_mri, current_mri)
             current_mri = next_mri
             current_cum_esal += annual_esal
     else:

@@ -242,7 +242,8 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
                 payload.annual_esal, current_cum_esal, yr,
                 payload.mean_ann_temp_avg, payload.freeze_index_yr, payload.freeze_thaw_yr,
             ]], columns=IRI_FEATURES)
-            next_mri = float(artifacts["iri_model"].predict(step_input)[0])
+            raw_next_mri = float(artifacts["iri_model"].predict(step_input)[0])
+            next_mri = max(raw_next_mri, current_mri)
             current_mri = next_mri
             current_cum_esal += payload.annual_esal
             step_score = float(np.clip(((FAILURE_THRESHOLD - current_mri) / FAILURE_THRESHOLD) * 100, 0, 100))
@@ -282,7 +283,8 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
             payload.annual_esal, projected_esal + payload.annual_esal * offset, future_year,
             payload.mean_ann_temp_avg, payload.freeze_index_yr, payload.freeze_thaw_yr,
         ]], columns=IRI_FEATURES)
-        projected_iri = float(artifacts["iri_model"].predict(future_input)[0])
+        raw_projected_iri = float(artifacts["iri_model"].predict(future_input)[0])
+        projected_iri = max(raw_projected_iri, projected_iri)
         projection.append({
             "year": future_year,
             "iri": round(projected_iri, 3),
