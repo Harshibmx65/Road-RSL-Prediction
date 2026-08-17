@@ -639,7 +639,7 @@ function renderTestMeterResult(sample, data, sampleNum) {
         </div>
         <div class="test-score-card">
           <span>Sensor Weighting</span>
-          <strong style="color:var(--muted); font-size:11px;">${hist.fwd_available ? '40% Surface + 60% Structural Deflections' : '100% Surface (Fallback)'}</strong>
+          <strong style="color:var(--muted); font-size:11px;">${hist.fwd_available ? '50% Surface + 50% Structural Deflections' : '100% Surface (Fallback)'}</strong>
         </div>
         <div class="test-score-card" style="background:#eef3f0; border-color:rgba(29,69,59,0.4);">
           <span>Historical Baseline RHI</span>

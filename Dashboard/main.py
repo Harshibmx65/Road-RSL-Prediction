@@ -222,9 +222,9 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
         fwd_score = float(np.clip((dist_to_poor / denom * 100) if denom > 0 else 50.0, 0, 100))
         fwd_score = round(fwd_score, 2)
 
-    # Historical RHI combines synchronized surface + structural data (40/60 weight or fallback)
+    # Historical RHI combines synchronized surface + structural data (50/50 weight or fallback)
     if not fallback and fwd_score is not None:
-        hist_rhi = float((hist_iri_score * 0.40) + (fwd_score * 0.60))
+        hist_rhi = float((hist_iri_score * 0.50) + (fwd_score * 0.50))
     else:
         hist_rhi = hist_iri_score
     hist_condition = condition(hist_rhi)
@@ -315,7 +315,7 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
             "rhi": round(hist_rhi, 2),
             "condition": hist_condition,
             "fwd_available": payload.fwd_available and fwd_score is not None,
-            "weights": "40% Surface + 60% Structural" if (payload.fwd_available and fwd_score is not None) else "100% Surface (Fallback)",
+            "weights": "50% Surface + 50% Structural" if (payload.fwd_available and fwd_score is not None) else "100% Surface (Fallback)",
         },
         "present_estimation": {
             "year": target_present_year,

@@ -103,7 +103,7 @@ def main():
 
     # 1. Historical Score Calculation (Synchronized snapshot at measurement year)
     if has_fwd and fwd_score is not None:
-        historical_rhi = float((historical_iri_score * 0.40) + (fwd_score * 0.60))
+        historical_rhi = float((historical_iri_score * 0.50) + (fwd_score * 0.50))
     else:
         historical_rhi = float(historical_iri_score)
 
