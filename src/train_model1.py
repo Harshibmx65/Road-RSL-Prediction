@@ -87,6 +87,19 @@ df_full = df.copy()
 # Drop rows without a known future IRI for model training
 df_train = df.dropna(subset=['FUTURE_IRI']).copy()
 
+# --- CALCULATE PROFESSIONAL FALLBACK RATE ---
+# Find only rows where the road naturally degraded (no maintenance)
+natural_degradation = df_train[df_train['FUTURE_IRI'] > df_train['MRI']]
+
+# Calculate the median annual increase in IRI
+median_annual_deterioration = float((natural_degradation['FUTURE_IRI'] - natural_degradation['MRI']).median())
+
+print(f"Data-Driven Median Annual Deterioration: {median_annual_deterioration:.4f} m/km/year")
+
+# Save this constant so it can be used in your dashboard and scripts
+with open(model_dir / 'deterioration_rate.txt', 'w') as f:
+    f.write(str(median_annual_deterioration))
+
 # --- MODEL TRAINING ---
 print("Training Model 1 (Surface & Climate)...")
 features = ['MRI', 'AADTT_ALL_TRUCKS_TREND', 'ANNUAL_TRUCK_VOLUME_TREND',
@@ -158,7 +171,16 @@ def forecast_to_present(row, target_year=CURRENT_YEAR):
         arr = np.array([[current_mri, aadtt, truck_vol, ann_esal, current_cum_esal, yr, temp, freeze_idx, freeze_thaw]], dtype=np.float32)
         dmat = DMatrix(arr, feature_names=features)
         raw_next_mri = float(booster.predict(dmat)[0])
-        next_mri = max(raw_next_mri, current_mri)
+        
+        # PROFESSIONAL INFERENCE CLAMP (Data-Driven Heuristic)
+        if raw_next_mri <= current_mri:
+            # If AI predicts healing or no change, apply the statistical median degradation
+            next_mri = current_mri + median_annual_deterioration
+        else:
+            # If AI predicts valid degradation, trust the AI
+            next_mri = raw_next_mri
+            
+        # Update state for the next loop iteration
         current_mri = next_mri
         current_cum_esal += ann_esal
         

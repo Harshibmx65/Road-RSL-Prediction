@@ -121,7 +121,17 @@ def load_artifacts() -> dict[str, Any]:
     missing = [filename for filename in required.values() if not (MODEL_DIR / filename).exists()]
     if missing:
         raise HTTPException(503, f"Missing model artifacts: {', '.join(missing)}. Train the models first.")
-    return {name: joblib.load(MODEL_DIR / filename) for name, filename in required.items()}
+    artifacts = {name: joblib.load(MODEL_DIR / filename) for name, filename in required.items()}
+    det_rate_file = MODEL_DIR / "deterioration_rate.txt"
+    if det_rate_file.exists():
+        try:
+            with open(det_rate_file, "r") as f:
+                artifacts["deterioration_rate"] = float(f.read().strip())
+        except Exception:
+            artifacts["deterioration_rate"] = 0.04
+    else:
+        artifacts["deterioration_rate"] = 0.04
+    return artifacts
 
 
 @lru_cache(maxsize=1)
@@ -243,7 +253,11 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
                 payload.mean_ann_temp_avg, payload.freeze_index_yr, payload.freeze_thaw_yr,
             ]], columns=IRI_FEATURES)
             raw_next_mri = float(artifacts["iri_model"].predict(step_input)[0])
-            next_mri = max(raw_next_mri, current_mri)
+            # PROFESSIONAL INFERENCE CLAMP (Data-Driven Heuristic)
+            if raw_next_mri <= current_mri:
+                next_mri = current_mri + artifacts.get("deterioration_rate", 0.04)
+            else:
+                next_mri = raw_next_mri
             current_mri = next_mri
             current_cum_esal += payload.annual_esal
             step_score = float(np.clip(((FAILURE_THRESHOLD - current_mri) / FAILURE_THRESHOLD) * 100, 0, 100))
@@ -251,9 +265,22 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
     else:
         current_mri = hist_mri
 
-    # 3. PRESENT DAY (2026) ESTIMATION ("Play It Safe" Rule: 100% Surface AI Fallback)
+    # 3. PRESENT DAY (2026) ESTIMATION
     present_iri_score = float(np.clip(((FAILURE_THRESHOLD - current_mri) / FAILURE_THRESHOLD) * 100, 0, 100))
-    present_rhi = present_iri_score
+
+    # THE FIX: Check if the data is already from the current year
+    if hist_year == target_present_year:
+        # FWD data is fresh! Do not trigger the fallback. 
+        # The Present Day RHI is exactly equal to the Historical RHI.
+        present_rhi = hist_rhi
+        structural_policy = "Concurrent FWD data included."
+        fallback_engaged = False if (payload.fwd_available and fwd_score is not None) else True
+    else:
+        # Data is from the past. Trigger the fallback to surface-only.
+        present_rhi = present_iri_score
+        structural_policy = "Historic FWD excluded (requires physical re-survey)."
+        fallback_engaged = True
+
     present_condition = condition(present_rhi)
 
     # 4. SHAP Feature Explanation for 2026 State
@@ -284,7 +311,11 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
             payload.mean_ann_temp_avg, payload.freeze_index_yr, payload.freeze_thaw_yr,
         ]], columns=IRI_FEATURES)
         raw_projected_iri = float(artifacts["iri_model"].predict(future_input)[0])
-        projected_iri = max(raw_projected_iri, projected_iri)
+        # PROFESSIONAL INFERENCE CLAMP (Data-Driven Heuristic)
+        if raw_projected_iri <= projected_iri:
+            projected_iri = projected_iri + artifacts.get("deterioration_rate", 0.04)
+        else:
+            projected_iri = raw_projected_iri
         projection.append({
             "year": future_year,
             "iri": round(projected_iri, 3),
@@ -300,7 +331,7 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
         "fwd_score": fwd_score,
         "fwd_health": health,
         "recommendation": recommendation(present_rhi),
-        "fallback_engaged": True, # Present day 2026 engages play-it-safe fallback
+        "fallback_engaged": fallback_engaged,
         "explanation": explanation,
         "projection": projection,
         "simulation_path": simulation_path,
@@ -325,7 +356,7 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
             "condition": present_condition,
             "simulated_years": max(0, target_present_year - hist_year),
             "iri_change": round(current_mri - hist_mri, 3),
-            "policy": "Historical FWD retained as baseline; excluded from present-day projection (physical re-survey required)",
+            "policy": structural_policy,
         },
     }
 
@@ -623,7 +654,7 @@ async def batch_prediction(file: UploadFile = File(...)) -> StreamingResponse:
                 "Present_2026_Condition": pres["condition"],
                 "Simulated_Fast_Forward_Years": pres["simulated_years"],
                 "IRI_Deterioration_Delta": pres["iri_change"],
-                "Structural_Policy": "Play It Safe: 100% Surface AI (Old FWD safely excluded)",
+                "Structural_Policy": pres["policy"],
                 "Top_Risk_Driver": result["explanation"][0]["feature"] if result["explanation"] else "N/A",
                 "Recommendation": result["recommendation"],
             })

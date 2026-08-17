@@ -118,6 +118,9 @@ function updateResult(result) {
     $('#today-delta').textContent = `${p.iri_change >= 0 ? '+' : ''}${p.iri_change.toFixed(3)} m/km (${p.simulated_years}y fast-forward)`;
     $('#today-cond').textContent = `${p.condition}`;
     $('#today-cond').style.color = presColor;
+    if ($('#today-policy')) {
+      $('#today-policy').textContent = p.policy || (p.simulated_years === 0 ? "Concurrent FWD data included." : "Historic FWD excluded (requires physical re-survey).");
+    }
   }
 
   // 3. Component Breakdown Metric Rows
@@ -325,7 +328,7 @@ function downloadPdf() {
     ['Projection Interval', `${p.simulated_years} years of traffic & climate deterioration`],
     ['Estimated 2026 Present IRI', `${Number(p.estimated_iri).toFixed(3)} m/km (Change: ${p.iri_change >= 0 ? '+' : ''}${Number(p.iri_change).toFixed(3)} m/km)`],
     ['Present Day (2026) RHI', `${Number(p.rhi).toFixed(1)} / 100 (${p.condition})`],
-    ['Structural Data Consideration', 'Historical FWD retained as baseline; excluded from present-day projection (physical re-survey required)'],
+    ['Structural Data Consideration', p.policy || (p.simulated_years === 0 ? 'Concurrent FWD data included.' : 'Historic FWD excluded (requires physical re-survey).')],
     ['Maintenance Action', r.recommendation]
   ];
 
@@ -600,7 +603,7 @@ function renderTestMeterResult(sample, data, sampleNum) {
         </div>
         <div class="test-score-card">
           <span>Structural Policy</span>
-          <strong style="color:var(--muted); font-size:11px;">100% Surface AI (Old FWD safely excluded)</strong>
+          <strong style="color:var(--muted); font-size:11px;">${pres.policy || (pres.simulated_years === 0 ? 'Concurrent FWD data included.' : '100% Surface AI (Old FWD safely excluded)')}</strong>
         </div>
         <div class="test-score-card" style="background:#edf8f2; border-color:rgba(18,150,90,0.4);">
           <span>Present Day (2026) RHI</span>

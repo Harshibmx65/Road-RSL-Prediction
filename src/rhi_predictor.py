@@ -29,6 +29,14 @@ def main():
         print("Error: Model files not found in 'models/'. Please run train_model1.py and train_model2.py first.")
         return
 
+    # Load data-driven median annual deterioration rate fallback
+    det_rate_file = model_dir / 'deterioration_rate.txt'
+    if det_rate_file.exists():
+        with open(det_rate_file, 'r') as f:
+            median_annual_deterioration = float(f.read().strip())
+    else:
+        median_annual_deterioration = 0.04
+
     # Section 1: Road & Historical Surface Measurement Data
     print("--- Section 1: Historical Surface, Traffic & Climate Data ---")
     shrp_id = input('SHRP Section ID (e.g., 0101): ').strip() or 'UNKNOWN'
@@ -110,28 +118,49 @@ def main():
     historical_condition = 'Good' if historical_rhi >= 75 else 'Fair' if historical_rhi >= 50 else 'Poor'
 
     # 2. AI "Fast-Forward" Simulation to Present Day (2026)
-    target_present_year = 2026
+    current_year = 2026
+    target_present_year = current_year
     current_mri = mri
     current_cum_esal = cumulative_esal
 
-    if measurement_year < target_present_year:
-        print(f"\nAI Fast-Forwarding deterioration from {measurement_year} to {target_present_year}...")
-        for yr in range(measurement_year, target_present_year):
+    if measurement_year < current_year:
+        print(f"\nAI Fast-Forwarding deterioration from {measurement_year} to {current_year}...")
+        for yr in range(measurement_year, current_year):
             step_input = pd.DataFrame([[
                 current_mri, aadtt, annual_truck_vol, annual_esal, 
                 current_cum_esal, yr, mean_temp, freeze_index, freeze_thaw
             ]], columns=features1)
             
             raw_next_mri = float(model1.predict(step_input)[0])
-            next_mri = max(raw_next_mri, current_mri)
+            
+            # PROFESSIONAL INFERENCE CLAMP (Data-Driven Heuristic)
+            if raw_next_mri <= current_mri:
+                # If AI predicts healing or no change, apply the statistical median degradation
+                next_mri = current_mri + median_annual_deterioration
+            else:
+                # If AI predicts valid degradation, trust the AI
+                next_mri = raw_next_mri
+                
+            # Update state for the next loop iteration
             current_mri = next_mri
             current_cum_esal += annual_esal
     else:
         current_mri = mri
 
-    # 3. Present Day Score ("Play It Safe" Rule: 100% Surface AI Forecast)
-    current_iri_score = float(np.clip(((FAILURE_LIMIT - current_mri) / FAILURE_LIMIT) * 100, 0, 100))
-    current_rhi = current_iri_score
+    # 3. Present Day Score (Dual Timeline Evaluation)
+    current_iri_score = max(0.0, min(100.0, ((FAILURE_LIMIT - current_mri) / FAILURE_LIMIT) * 100.0))
+
+    # THE FIX: Check if the data is already from the current year
+    if measurement_year == current_year:
+        # FWD data is fresh! Do not trigger the fallback. 
+        # The Present Day RHI is exactly equal to the Historical RHI.
+        current_rhi = historical_rhi 
+        structural_policy = "Concurrent FWD data included."
+    else:
+        # Data is from the past. Trigger the fallback to surface-only.
+        current_rhi = current_iri_score 
+        structural_policy = "Historic FWD excluded (requires physical re-survey)."
+
     current_condition = 'Good' if current_rhi >= 75 else 'Fair' if current_rhi >= 50 else 'Poor'
 
     # --- DISPLAY DUAL REPORT ---
@@ -145,11 +174,11 @@ def main():
     print(f"   - Structural Health   : {fwd_display}")
     print(f"   - Historical RHI Score: {historical_rhi:.2f} / 100 ({historical_condition})")
     print(f"{'-'*60}")
-    print(f"2. PRESENT DAY ESTIMATION ({target_present_year}):")
-    print(f"   - AI Simulated Years  : {max(0, target_present_year - measurement_year)} years")
+    print(f"2. PRESENT DAY ESTIMATION ({current_year}):")
+    print(f"   - AI Simulated Years  : {max(0, current_year - measurement_year)} years")
     print(f"   - Estimated 2026 IRI  : {current_mri:.3f} m/km (Change: {current_mri - mri:+.3f} m/km)")
     print(f"   - Present Day RHI     : {current_rhi:.2f} / 100 ({current_condition})")
-    print(f"   - Structural Policy   : 'Play It Safe' Rule engaged (Old FWD safely excluded)")
+    print(f"   - Structural Policy   : {structural_policy}")
     print(f"{'='*60}\n")
 
 if __name__ == "__main__":
