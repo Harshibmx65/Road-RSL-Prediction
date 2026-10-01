@@ -1,14 +1,15 @@
 """FastAPI dashboard for the Road RSL Prediction project.
 
-This app is deliberately self-contained: it reads the existing project data and
-model artifacts but never writes to them. Run it from the Dashboard directory.
+Supervised dual time-series forecasting:
+1. Model 1 (XGBoost Regressor): Surface roughness (IRI / MRI) deterioration.
+2. Model 2 (XGBoost Regressor): Structural layer fatigue (Surface Curvature Index SCI / BDI) deterioration.
+Outputs a synchronized 50/50 Road Health Index (RHI) across both historical snapshot and present day (2026).
 """
 
 from __future__ import annotations
 
 import io
 import os
-from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -29,17 +30,23 @@ DATA_DIR = ROOT_DIR / "data"
 MODEL_DIR = ROOT_DIR / "models"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 SECTION_COLUMNS = ["SHRP_ID", "STATE_CODE", "CONSTRUCTION_NO"]
+
 IRI_FEATURES = [
     "MRI", "AADTT_ALL_TRUCKS_TREND", "ANNUAL_TRUCK_VOLUME_TREND",
     "ANNUAL_ESAL_TREND", "CUMULATIVE_ESAL", "YEAR",
     "MEAN_ANN_TEMP_AVG", "FREEZE_INDEX_YR", "FREEZE_THAW_YR",
 ]
-FWD_FEATURES = [
-    "PEAK_DEFL_1", "PEAK_DEFL_2", "PEAK_DEFL_3", "PEAK_DEFL_4", "PEAK_DEFL_5",
-    "PEAK_DEFL_6", "PEAK_DEFL_7", "DROP_LOAD", "DROP_HEIGHT",
+
+SCI_FEATURES = [
+    "SCI", "BDI", "DROP_LOAD", "DROP_HEIGHT",
     "PAVEMENT_FAMILY_ENC", "LANE_NO_ENC",
+    "AADTT_ALL_TRUCKS_TREND", "ANNUAL_TRUCK_VOLUME_TREND", "ANNUAL_ESAL_TREND",
+    "CUMULATIVE_ESAL", "YEAR", "YEARS_SINCE_LAST_REPAIR",
+    "MEAN_ANN_TEMP_AVG", "FREEZE_INDEX_YR", "FREEZE_THAW_YR",
 ]
-FAILURE_THRESHOLD = 2.5
+
+IRI_FAILURE_THRESHOLD = 2.5
+SCI_FAILURE_THRESHOLD = 200.0
 
 
 class PredictionInput(BaseModel):
@@ -54,7 +61,6 @@ class PredictionInput(BaseModel):
     freeze_thaw_yr: float = Field(..., ge=0, le=100_000)
     fwd_available: bool = True
     deflections: list[float] | None = None
-    # The model was trained with the source workbook's native scale (e.g., 710).
     drop_load: float | None = Field(default=None, ge=0, le=2_000)
     drop_height: int | None = Field(default=None, ge=1, le=4)
     pavement_family: str | None = None
@@ -73,13 +79,13 @@ class PredictionInput(BaseModel):
         if value is None:
             return value
         if len(value) != 7:
-            raise ValueError("Provide exactly seven FWD deflection values.")
+            raise ValueError("Provide exactly seven FWD deflection values (D1 through D7).")
         if any(item < 0 or item > 2_000 for item in value):
             raise ValueError("Each FWD deflection must be between 0 and 2,000 microns.")
         return value
 
 
-app = FastAPI(title="Road Health Index Dashboard", version="1.0.0")
+app = FastAPI(title="Road Health Index Dashboard", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.getenv("DASHBOARD_ALLOWED_ORIGIN", "*")],
@@ -89,48 +95,86 @@ app.add_middleware(
 
 
 def normalize_id(series: pd.Series) -> pd.Series:
+    """Zero-pad a SHRP_ID series to 4 digits, stripping float suffixes."""
     return series.astype(str).str.replace(".0", "", regex=False).str.zfill(4)
 
 
 def condition(score: float) -> str:
-    if score >= 75:
+    """Map a 0-100 RHI score to an FHWA-aligned pavement condition label."""
+    if score >= 75.0:
         return "Good"
-    if score >= 50:
+    if score >= 50.0:
         return "Fair"
     return "Poor"
 
 
 def recommendation(score: float) -> str:
-    if score >= 75:
-        return "Routine inspection and preventive maintenance."
-    if score >= 50:
-        return "Plan maintenance and investigate the contributing component."
-    return "Prioritize detailed inspection and corrective maintenance."
+    """Return a prescriptive maintenance policy string based on the RHI score."""
+    if score >= 75.0:
+        return "Routine preventive preservation; both surface roughness and asphalt structural integrity are in good condition."
+    if score >= 50.0:
+        return "Plan targeted resurfacing and investigate structural micro-fatigue before deeper base deterioration accelerates."
+    return "Prioritize structural rehabilitation and deep milling/paving to restore load-bearing capacity and surface ride quality."
+
+
+def score_iri(iri_val: float) -> float:
+    """Convert IRI (m/km) to a 0-100 surface health score.
+
+    Formula: ((2.5 - IRI) / 2.5) * 100, clipped to [0, 100].
+    Critical failure at IRI >= 2.5 m/km (FHWA Pavement Design Guide).
+    """
+    return float(np.clip(((IRI_FAILURE_THRESHOLD - iri_val) / IRI_FAILURE_THRESHOLD) * 100.0, 0.0, 100.0))
+
+
+def score_sci(sci_val: float) -> float:
+    """Convert temperature-normalized SCI (µm) to a 0-100 structural health score.
+
+    Formula: ((200 - SCI) / 200) * 100, clipped to [0, 100].
+    Critical failure at SCI >= 200 µm (AASHTO Pavement Design Guide fatigue threshold).
+    """
+    return float(np.clip(((SCI_FAILURE_THRESHOLD - sci_val) / SCI_FAILURE_THRESHOLD) * 100.0, 0.0, 100.0))
 
 
 @lru_cache(maxsize=1)
 def load_artifacts() -> dict[str, Any]:
+    """Load and cache all ML model binaries and calibrated fallback rates from disk.
+
+    Returns a dictionary containing the trained XGBoost regressors, LabelEncoders,
+    and physics-calibrated annual deterioration fallback rates for both IRI and SCI.
+    Raises HTTP 503 if any required model artifact is missing.
+    """
     required = {
         "iri_model": "iri_prediction_model.pkl",
-        "kmeans": "fwd_kmeans_model.pkl",
-        "scaler": "fwd_scaler.pkl",
-        "pavement_encoder": "fwd_le_pav.pkl",
-        "lane_encoder": "fwd_le_lane.pkl",
-        "health_mapping": "fwd_health_mapping.pkl",
+        "sci_model": "sci_prediction_model.pkl",
+        "pavement_encoder": "sci_le_pav.pkl",
+        "lane_encoder": "sci_le_lane.pkl",
     }
     missing = [filename for filename in required.values() if not (MODEL_DIR / filename).exists()]
     if missing:
-        raise HTTPException(503, f"Missing model artifacts: {', '.join(missing)}. Train the models first.")
+        raise HTTPException(503, f"Missing model artifacts: {', '.join(missing)}. Run model training first.")
     artifacts = {name: joblib.load(MODEL_DIR / filename) for name, filename in required.items()}
+
+    # Fallback degradation rates
     det_rate_file = MODEL_DIR / "deterioration_rate.txt"
     if det_rate_file.exists():
         try:
             with open(det_rate_file, "r") as f:
-                artifacts["deterioration_rate"] = float(f.read().strip())
+                artifacts["iri_deterioration_rate"] = float(f.read().strip())
         except Exception:
-            artifacts["deterioration_rate"] = 0.04
+            artifacts["iri_deterioration_rate"] = 0.04
     else:
-        artifacts["deterioration_rate"] = 0.04
+        artifacts["iri_deterioration_rate"] = 0.04
+
+    sci_det_file = MODEL_DIR / "sci_deterioration_rate.txt"
+    if sci_det_file.exists():
+        try:
+            with open(sci_det_file, "r") as f:
+                artifacts["sci_deterioration_rate"] = float(f.read().strip())
+        except Exception:
+            artifacts["sci_deterioration_rate"] = 4.2
+    else:
+        artifacts["sci_deterioration_rate"] = 4.2
+
     return artifacts
 
 
@@ -179,7 +223,7 @@ def load_network_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     exp_clean = exp[[*SECTION_COLUMNS, "PAVEMENT_FAMILY"]].drop_duplicates()
     fwd_records = pd.merge(fwd, exp_clean, on=SECTION_COLUMNS, how="inner")
-    required_fwd = [*FWD_FEATURES[:9], "PAVEMENT_FAMILY", "LANE_NO"]
+    required_fwd = [f"PEAK_DEFL_{i}" for i in range(1, 8)] + ["DROP_LOAD", "DROP_HEIGHT", "PAVEMENT_FAMILY", "LANE_NO"]
     fwd_records = fwd_records.dropna(subset=required_fwd).copy()
 
     try:
@@ -191,99 +235,165 @@ def load_network_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def predict(payload: PredictionInput) -> dict[str, Any]:
+    """Execute the full dual-timeline Road Health Index prediction pipeline.
+
+    Steps:
+    1. Compute historical snapshot RHI at survey year using measured IRI and
+       AASHTO BELLS temperature-normalized SCI from raw FWD deflections.
+    2. Run synchronized year-by-year AI simulation (Model 1: IRI, Model 2: Delta SCI)
+       from survey year to present day (2026), applying the Virtual Maintenance Trigger
+       (SCI reset to 40 µm at 150 µm threshold) and bounded decay [1.5, 8.0] µm/yr.
+    3. Compute SHAP-based feature importance contributions from Model 1.
+    4. Project 10-year planning horizon (2026-2036) with the same physics constraints.
+    5. Return a structured payload: historical snapshot, present-day estimation,
+       simulation path, projection, explanation cards, and top-level RHI score.
+    """
     artifacts = load_artifacts()
 
-    # 1. HISTORICAL SNAPSHOT AT MEASUREMENT TIME (payload.year)
+    # --- 1. HISTORICAL SNAPSHOT AT SURVEY DATE (payload.year) ---
     hist_year = int(payload.year)
     hist_mri = float(payload.mri)
-    hist_iri_score = float(np.clip(((FAILURE_THRESHOLD - hist_mri) / FAILURE_THRESHOLD) * 100, 0, 100))
+    hist_iri_score = score_iri(hist_mri)
 
-    fwd_score: float | None = None
-    health: str | None = None
-    fallback = not payload.fwd_available
-    if payload.fwd_available:
-        if not payload.deflections or len(payload.deflections) != 7:
-            raise HTTPException(422, "Provide exactly seven FWD deflection values when FWD data is available.")
-        if any(value < 0 or value > 2_000 for value in payload.deflections):
-            raise HTTPException(422, "Each FWD deflection must be between 0 and 2,000 microns.")
-        if None in (payload.drop_load, payload.drop_height, payload.pavement_family, payload.lane_no):
-            raise HTTPException(422, "Complete all FWD fields or turn off FWD availability.")
+    has_fwd = bool(payload.fwd_available and payload.deflections and len(payload.deflections) == 7)
+    hist_sci: float | None = None
+    hist_bdi: float | None = None
+    hist_sci_score: float | None = None
+    pav_enc = 0
+    lane_enc = 0
+    drop_load = float(payload.drop_load or 710.0)
+    drop_height = int(payload.drop_height or 4)
+
+    if has_fwd:
+        d = payload.deflections
+        # Mechanistic Indices: SCI (D1 - D2) and BDI (D2 - D3) with AASHTO BELLS temperature normalization
+        t_pav = float(payload.mean_ann_temp_avg)
+        bells_factor = 10.0 ** (-0.0079 * (20.0 - t_pav))
+        d1_norm = d[0] * bells_factor
+        d2_norm = d[1] * bells_factor
+        hist_sci = float(d1_norm - d2_norm)
+        hist_bdi = float(d[1] - d[2])
+        hist_sci_score = score_sci(hist_sci)
+
         try:
-            pavement = artifacts["pavement_encoder"].transform([payload.pavement_family])[0]
-            lane = artifacts["lane_encoder"].transform([payload.lane_no])[0]
-        except ValueError as exc:
-            raise HTTPException(422, f"Unsupported FWD category: {exc}") from exc
-        fwd_input = pd.DataFrame([[
-            *payload.deflections, payload.drop_load, payload.drop_height, pavement, lane,
-        ]], columns=FWD_FEATURES)
-        fwd_scaled = artifacts["scaler"].transform(fwd_input)
-        cluster = int(artifacts["kmeans"].predict(fwd_scaled)[0])
-        health = artifacts["health_mapping"][cluster]
+            pav_str = payload.pavement_family or "ACUB"
+            lane_str = payload.lane_no or "F1"
+            pav_enc = int(artifacts["pavement_encoder"].transform([pav_str])[0])
+            lane_enc = int(artifacts["lane_encoder"].transform([lane_str])[0])
+        except Exception:
+            pav_enc = 0
+            lane_enc = 0
 
-        reverse_mapping = {v: k for k, v in artifacts["health_mapping"].items()}
-        good_idx = reverse_mapping["Good"]
-        poor_idx = reverse_mapping["Poor"]
-
-        distances = artifacts["kmeans"].transform(fwd_scaled)
-        dist_to_good = float(distances[0, good_idx])
-        dist_to_poor = float(distances[0, poor_idx])
-        denom = dist_to_good + dist_to_poor
-
-        fwd_score = float(np.clip((dist_to_poor / denom * 100) if denom > 0 else 50.0, 0, 100))
-        fwd_score = round(fwd_score, 2)
-
-    # Historical RHI combines synchronized surface + structural data (50/50 weight or fallback)
-    if not fallback and fwd_score is not None:
-        hist_rhi = float((hist_iri_score * 0.50) + (fwd_score * 0.50))
+    # Historical Synchronized RHI (50% Surface + 50% Structural)
+    if has_fwd and hist_sci_score is not None:
+        hist_rhi = float((hist_iri_score * 0.50) + (hist_sci_score * 0.50))
+        hist_fwd_health = condition(hist_sci_score)
     else:
         hist_rhi = hist_iri_score
+        hist_fwd_health = "Not provided"
+
     hist_condition = condition(hist_rhi)
 
-    # 2. AI FAST-FORWARD ITERATIVE FORECAST TO PRESENT DAY (2026)
+    # --- 2. CONCURRENT DUAL AI TIME-SERIES FAST-FORWARD TO PRESENT DAY (2026) ---
     target_present_year = 2026
     current_mri = hist_mri
+    current_sci = hist_sci
+    current_bdi = hist_bdi
     current_cum_esal = payload.cumulative_esal
-    simulation_path = [{"year": hist_year, "iri": round(hist_mri, 3), "iri_score": round(hist_iri_score, 2)}]
+    years_since_repair = 0
+
+    simulation_path = [{
+        "year": hist_year,
+        "iri": round(hist_mri, 3),
+        "iri_score": round(hist_iri_score, 1),
+        "sci": round(hist_sci, 1) if hist_sci is not None else None,
+        "sci_score": round(hist_sci_score, 1) if hist_sci_score is not None else None,
+        "rhi": round(hist_rhi, 1),
+    }]
 
     if hist_year < target_present_year:
         for yr in range(hist_year, target_present_year):
-            step_input = pd.DataFrame([[
+            # 1. Surface step forecast (Model 1)
+            step_iri_input = pd.DataFrame([[
                 current_mri, payload.aadtt, payload.annual_truck_volume,
                 payload.annual_esal, current_cum_esal, yr,
                 payload.mean_ann_temp_avg, payload.freeze_index_yr, payload.freeze_thaw_yr,
             ]], columns=IRI_FEATURES)
-            raw_next_mri = float(artifacts["iri_model"].predict(step_input)[0])
-            # PROFESSIONAL INFERENCE CLAMP (Data-Driven Heuristic)
-            if raw_next_mri <= current_mri:
-                next_mri = current_mri + artifacts.get("deterioration_rate", 0.04)
-            else:
-                next_mri = raw_next_mri
+            raw_next_mri = float(artifacts["iri_model"].predict(step_iri_input)[0])
+            next_mri = raw_next_mri if raw_next_mri > current_mri else current_mri + artifacts.get("iri_deterioration_rate", 0.04)
             current_mri = next_mri
+
+            # 2. Structural step forecast (Model 2: Delta SCI + Virtual Maintenance Trigger)
+            if has_fwd and current_sci is not None:
+                step_sci_input = pd.DataFrame([[
+                    current_sci, current_bdi, drop_load, drop_height,
+                    pav_enc, lane_enc,
+                    payload.aadtt, payload.annual_truck_volume, payload.annual_esal,
+                    current_cum_esal, yr, years_since_repair,
+                    payload.mean_ann_temp_avg, payload.freeze_index_yr, payload.freeze_thaw_yr,
+                ]], columns=SCI_FEATURES)
+
+                try:
+                    predicted_delta_sci = float(artifacts["sci_model"].predict(step_sci_input)[0])
+                    # Bounded decay rate: max(1.5, min(predicted_delta_sci, 8.0))
+                    annual_degradation = max(1.5, min(predicted_delta_sci, 8.0))
+                except Exception:
+                    # Physics-backed calibrated default fallback
+                    annual_degradation = float(artifacts.get("sci_deterioration_rate", 4.2))
+
+                next_sci = current_sci + annual_degradation
+
+                # Virtual Maintenance Trigger:
+                # If simulated next_sci exceeds 150 µm (critical structural failure),
+                # simulate physical overlay by resetting next_sci to baseline of 40 µm,
+                # resetting years_since_repair to 0, and continuing the simulation loop naturally.
+                if next_sci > 150.0:
+                    next_sci = 40.0
+                    years_since_repair = 0
+                    if current_bdi is not None:
+                        current_bdi = max(15.0, current_bdi * 0.5)
+                else:
+                    years_since_repair += 1
+
+                if current_bdi is not None and next_sci != 40.0:
+                    current_bdi = current_bdi * (next_sci / max(1.0, current_sci))
+                current_sci = next_sci
+
             current_cum_esal += payload.annual_esal
-            step_score = float(np.clip(((FAILURE_THRESHOLD - current_mri) / FAILURE_THRESHOLD) * 100, 0, 100))
-            simulation_path.append({"year": yr + 1, "iri": round(current_mri, 3), "iri_score": round(step_score, 2)})
+
+            step_iri_s = score_iri(current_mri)
+            step_sci_s = score_sci(current_sci) if (has_fwd and current_sci is not None) else None
+            step_rhi = (step_iri_s * 0.50 + step_sci_s * 0.50) if step_sci_s is not None else step_iri_s
+
+            simulation_path.append({
+                "year": yr + 1,
+                "iri": round(current_mri, 3),
+                "iri_score": round(step_iri_s, 1),
+                "sci": round(current_sci, 1) if current_sci is not None else None,
+                "sci_score": round(step_sci_s, 1) if step_sci_s is not None else None,
+                "rhi": round(step_rhi, 1),
+            })
     else:
         current_mri = hist_mri
+        current_sci = hist_sci
 
-    # 3. PRESENT DAY (2026) ESTIMATION
-    present_iri_score = float(np.clip(((FAILURE_THRESHOLD - current_mri) / FAILURE_THRESHOLD) * 100, 0, 100))
+    # --- 3. PRESENT DAY (2026) ESTIMATION ---
+    present_iri_score = score_iri(current_mri)
 
-    # THE FIX: Check if the data is already from the current year
-    if hist_year == target_present_year:
-        # FWD data is fresh! Do not trigger the fallback. 
-        # The Present Day RHI is exactly equal to the Historical RHI.
-        present_rhi = hist_rhi
-        structural_policy = "Concurrent FWD data included."
-        fallback_engaged = False if (payload.fwd_available and fwd_score is not None) else True
+    if has_fwd and current_sci is not None:
+        present_sci_score = score_sci(current_sci)
+        present_rhi = float((present_iri_score * 0.50) + (present_sci_score * 0.50))
+        structural_policy = "Synchronized 50/50 Dual AI Forecast (Surface + Structural Decay Projected to 2026)"
+        present_fwd_health = condition(present_sci_score)
     else:
-        # Data is from the past. Trigger the fallback to surface-only.
+        present_sci_score = None
         present_rhi = present_iri_score
-        structural_policy = "Historic FWD excluded (requires physical re-survey)."
-        fallback_engaged = True
+        structural_policy = "100% Surface AI Forecast (FWD deflection data not supplied)"
+        present_fwd_health = "N/A"
 
     present_condition = condition(present_rhi)
 
-    # 4. SHAP Feature Explanation for 2026 State
+    # --- 4. SHAP FEATURE EXPLANATION FOR 2026 ---
     explanation_input = pd.DataFrame([[
         current_mri, payload.aadtt, payload.annual_truck_volume, payload.annual_esal,
         current_cum_esal, target_present_year, payload.mean_ann_temp_avg,
@@ -295,43 +405,83 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
     total_impact = sum(abs(float(value)) for value in contributions) or 1
     explanation = sorted([
         {"feature": feature.replace("_", " ").title(), "impact_percent": round(abs(float(value)) / total_impact * 100, 1),
-         "direction": "increases roughness risk" if value > 0 else "reduces roughness risk"}
+         "direction": "accelerates deterioration" if value > 0 else "reduces deterioration rate"}
         for feature, value in zip(IRI_FEATURES, contributions)
     ], key=lambda item: item["impact_percent"], reverse=True)[:4]
 
-    # 5. Future 10-Year Horizon Projection (2026 -> 2036)
+    # --- 5. 10-YEAR HORIZON PROJECTION (2026 -> 2036) ---
     projected_iri = current_mri
+    projected_sci = current_sci
+    projected_bdi = current_bdi
     projected_esal = current_cum_esal
+    projected_years_repair = years_since_repair
     projection = []
+
     for offset in range(1, 11):
         future_year = target_present_year + offset
-        future_input = pd.DataFrame([[
+        # Surface projection
+        future_iri_input = pd.DataFrame([[
             projected_iri, payload.aadtt, payload.annual_truck_volume,
             payload.annual_esal, projected_esal + payload.annual_esal * offset, future_year,
             payload.mean_ann_temp_avg, payload.freeze_index_yr, payload.freeze_thaw_yr,
         ]], columns=IRI_FEATURES)
-        raw_projected_iri = float(artifacts["iri_model"].predict(future_input)[0])
-        # PROFESSIONAL INFERENCE CLAMP (Data-Driven Heuristic)
-        if raw_projected_iri <= projected_iri:
-            projected_iri = projected_iri + artifacts.get("deterioration_rate", 0.04)
-        else:
-            projected_iri = raw_projected_iri
+        raw_p_iri = float(artifacts["iri_model"].predict(future_iri_input)[0])
+        projected_iri = raw_p_iri if raw_p_iri > projected_iri else projected_iri + artifacts.get("iri_deterioration_rate", 0.04)
+
+        # Structural projection (Annualized Delta + Virtual Maintenance Trigger)
+        if has_fwd and projected_sci is not None:
+            future_sci_input = pd.DataFrame([[
+                projected_sci, projected_bdi, drop_load, drop_height,
+                pav_enc, lane_enc,
+                payload.aadtt, payload.annual_truck_volume, payload.annual_esal,
+                projected_esal + payload.annual_esal * offset, future_year, projected_years_repair,
+                payload.mean_ann_temp_avg, payload.freeze_index_yr, payload.freeze_thaw_yr,
+            ]], columns=SCI_FEATURES)
+
+            try:
+                predicted_p_delta = float(artifacts["sci_model"].predict(future_sci_input)[0])
+                p_annual_deg = max(1.5, min(predicted_p_delta, 8.0))
+            except Exception:
+                p_annual_deg = float(artifacts.get("sci_deterioration_rate", 4.2))
+
+            next_p_sci = projected_sci + p_annual_deg
+
+            # Virtual Maintenance Trigger
+            if next_p_sci > 150.0:
+                next_p_sci = 40.0
+                projected_years_repair = 0
+                if projected_bdi is not None:
+                    projected_bdi = max(15.0, projected_bdi * 0.5)
+            else:
+                projected_years_repair += 1
+
+            if projected_bdi is not None and next_p_sci != 40.0:
+                projected_bdi = projected_bdi * (next_p_sci / max(1.0, projected_sci))
+            projected_sci = next_p_sci
+
+        p_iri_score = score_iri(projected_iri)
+        p_sci_score = score_sci(projected_sci) if (has_fwd and projected_sci is not None) else None
+        p_rhi = (p_iri_score * 0.50 + p_sci_score * 0.50) if p_sci_score is not None else p_iri_score
+
         projection.append({
             "year": future_year,
             "iri": round(projected_iri, 3),
-            "iri_score": round(float(np.clip(((FAILURE_THRESHOLD - projected_iri) / FAILURE_THRESHOLD) * 100, 0, 100)), 2),
+            "iri_score": round(p_iri_score, 1),
+            "sci": round(projected_sci, 1) if projected_sci is not None else None,
+            "sci_score": round(p_sci_score, 1) if p_sci_score is not None else None,
+            "rhi": round(p_rhi, 1),
         })
 
     return {
         # Primary Present Day (2026) Results
-        "rhi": round(present_rhi, 2),
+        "rhi": round(present_rhi, 1),
         "condition": present_condition,
-        "iri_score": round(present_iri_score, 2),
+        "iri_score": round(present_iri_score, 1),
         "predicted_future_iri": round(current_mri, 3),
-        "fwd_score": fwd_score,
-        "fwd_health": health,
+        "predicted_future_sci": round(current_sci, 1) if current_sci is not None else None,
+        "fwd_score": round(present_sci_score, 1) if present_sci_score is not None else None,
+        "fwd_health": present_fwd_health,
         "recommendation": recommendation(present_rhi),
-        "fallback_engaged": fallback_engaged,
         "explanation": explanation,
         "projection": projection,
         "simulation_path": simulation_path,
@@ -340,22 +490,26 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
         "historical_snapshot": {
             "year": hist_year,
             "measured_iri": round(hist_mri, 3),
-            "iri_score": round(hist_iri_score, 2),
-            "fwd_score": fwd_score,
-            "fwd_health": health or "Not recorded",
-            "rhi": round(hist_rhi, 2),
+            "iri_score": round(hist_iri_score, 1),
+            "measured_sci": round(hist_sci, 1) if hist_sci is not None else None,
+            "fwd_score": round(hist_sci_score, 1) if hist_sci_score is not None else None,
+            "fwd_health": hist_fwd_health,
+            "rhi": round(hist_rhi, 1),
             "condition": hist_condition,
-            "fwd_available": payload.fwd_available and fwd_score is not None,
-            "weights": "50% Surface + 50% Structural" if (payload.fwd_available and fwd_score is not None) else "100% Surface (Fallback)",
+            "fwd_available": has_fwd and hist_sci_score is not None,
+            "weights": "50% Surface + 50% Structural (Supervised AI)" if (has_fwd and hist_sci_score is not None) else "100% Surface (Fallback)",
         },
         "present_estimation": {
             "year": target_present_year,
             "estimated_iri": round(current_mri, 3),
-            "iri_score": round(present_iri_score, 2),
-            "rhi": round(present_rhi, 2),
+            "iri_score": round(present_iri_score, 1),
+            "estimated_sci": round(current_sci, 1) if current_sci is not None else None,
+            "fwd_score": round(present_sci_score, 1) if present_sci_score is not None else None,
+            "rhi": round(present_rhi, 1),
             "condition": present_condition,
             "simulated_years": max(0, target_present_year - hist_year),
             "iri_change": round(current_mri - hist_mri, 3),
+            "sci_change": round(current_sci - hist_sci, 1) if (hist_sci is not None and current_sci is not None) else None,
             "policy": structural_policy,
         },
     }
@@ -363,7 +517,7 @@ def predict(payload: PredictionInput) -> dict[str, Any]:
 
 @app.get("/api/health")
 def health_check() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2.0.0"}
 
 
 @app.get("/api/metadata")
@@ -388,7 +542,6 @@ def sections(search: str = Query(default="", max_length=30), limit: int = Query(
     return result.sort_values(["STATE_CODE", "SHRP_ID"]).head(limit).to_dict("records")
 
 
-
 @app.get("/api/section/{shrp_id}")
 def section_detail(shrp_id: str, state_code: str = Query(...)) -> dict[str, Any]:
     iri_records, fwd_records = load_network_data()
@@ -402,11 +555,15 @@ def section_detail(shrp_id: str, state_code: str = Query(...)) -> dict[str, Any]
     fwd_rows = fwd_records[(fwd_records["SHRP_ID"] == shrp_id) & (fwd_records["STATE_CODE"] == state_code)]
     fwd_available = not fwd_rows.empty
     defaults = {
-        "mri": float(latest["MRI"]), "aadtt": float(latest["AADTT_ALL_TRUCKS_TREND"]),
+        "mri": float(latest["MRI"]),
+        "aadtt": float(latest["AADTT_ALL_TRUCKS_TREND"]),
         "annual_truck_volume": float(latest["ANNUAL_TRUCK_VOLUME_TREND"]),
-        "annual_esal": float(latest["ANNUAL_ESAL_TREND"]), "cumulative_esal": float(latest["CUMULATIVE_ESAL"]),
-        "year": int(latest["YEAR"]), "mean_ann_temp_avg": float(latest["MEAN_ANN_TEMP_AVG"]),
-        "freeze_index_yr": float(latest["FREEZE_INDEX_YR"]), "freeze_thaw_yr": float(latest["FREEZE_THAW_YR"]),
+        "annual_esal": float(latest["ANNUAL_ESAL_TREND"]),
+        "cumulative_esal": float(latest["CUMULATIVE_ESAL"]),
+        "year": int(latest["YEAR"]),
+        "mean_ann_temp_avg": float(latest["MEAN_ANN_TEMP_AVG"]),
+        "freeze_index_yr": float(latest["FREEZE_INDEX_YR"]),
+        "freeze_thaw_yr": float(latest["FREEZE_THAW_YR"]),
         "fwd_available": fwd_available,
     }
     basin: list[float] | None = None
@@ -414,9 +571,11 @@ def section_detail(shrp_id: str, state_code: str = Query(...)) -> dict[str, Any]
         fwd_latest = fwd_rows.iloc[-1]
         basin = [float(fwd_latest[f"PEAK_DEFL_{index}"]) for index in range(1, 8)]
         defaults.update({
-            "deflections": basin, "drop_load": float(fwd_latest["DROP_LOAD"]),
+            "deflections": basin,
+            "drop_load": float(fwd_latest["DROP_LOAD"]),
             "drop_height": int(fwd_latest["DROP_HEIGHT"]),
-            "pavement_family": str(fwd_latest["PAVEMENT_FAMILY"]), "lane_no": str(fwd_latest["LANE_NO"]),
+            "pavement_family": str(fwd_latest["PAVEMENT_FAMILY"]),
+            "lane_no": str(fwd_latest["LANE_NO"]),
         })
     prediction = predict(PredictionInput(**defaults))
     return {
@@ -435,30 +594,41 @@ def section_detail(shrp_id: str, state_code: str = Query(...)) -> dict[str, Any]
 @lru_cache(maxsize=1)
 def compute_network_summary() -> dict[str, Any]:
     iri_records, fwd_records = load_network_data()
-    latest = iri_records.sort_values("YEAR").groupby(["SHRP_ID", "STATE_CODE"], as_index=False).tail(1)
-    score = ((FAILURE_THRESHOLD - load_artifacts()["iri_model"].predict(latest[IRI_FEATURES])) / FAILURE_THRESHOLD * 100).clip(0, 100)
-    summary = latest[["SHRP_ID", "STATE_CODE"]].copy()
-    summary["iri_score"] = score
     artifacts = load_artifacts()
+    latest = iri_records.sort_values("YEAR").groupby(["SHRP_ID", "STATE_CODE"], as_index=False).tail(1).copy()
+    
+    # Surface scores
+    latest_iri_pred = artifacts["iri_model"].predict(latest[IRI_FEATURES])
+    latest["iri_score"] = ((IRI_FAILURE_THRESHOLD - latest_iri_pred) / IRI_FAILURE_THRESHOLD * 100).clip(0, 100)
+
+    # Merge structural if available with AASHTO BELLS temperature normalization
     fwd_records = fwd_records.copy()
-    fwd_records["PAVEMENT_FAMILY_ENC"] = artifacts["pavement_encoder"].transform(fwd_records["PAVEMENT_FAMILY"])
-    fwd_records["LANE_NO_ENC"] = artifacts["lane_encoder"].transform(fwd_records["LANE_NO"])
-    fwd_scaled = artifacts["scaler"].transform(fwd_records[FWD_FEATURES])
-    reverse_mapping = {v: k for k, v in artifacts["health_mapping"].items()}
-    good_idx = reverse_mapping["Good"]
-    poor_idx = reverse_mapping["Poor"]
-    distances = artifacts["kmeans"].transform(fwd_scaled)
-    dist_to_good = distances[:, good_idx]
-    dist_to_poor = distances[:, poor_idx]
-    denom = dist_to_good + dist_to_poor
-    fwd_records["fwd_score"] = np.clip(np.where(denom > 0, (dist_to_poor / denom) * 100, 50.0), 0, 100)
-    fwd_scores = fwd_records.groupby(["SHRP_ID", "STATE_CODE"], as_index=False)["fwd_score"].mean()
-    summary["annual_truck_volume"] = latest["ANNUAL_TRUCK_VOLUME_TREND"].values
-    summary = summary.merge(fwd_scores, on=["SHRP_ID", "STATE_CODE"], how="left")
-    summary["rhi"] = np.where(summary["fwd_score"].isna(), summary["iri_score"], (summary["iri_score"] + summary["fwd_score"]) / 2)
+    fwd_records = fwd_records.merge(
+        latest[["SHRP_ID", "STATE_CODE", "MEAN_ANN_TEMP_AVG"]],
+        on=["SHRP_ID", "STATE_CODE"],
+        how="left",
+    )
+    t_pav_sum = fwd_records["MEAN_ANN_TEMP_AVG"].fillna(20.0).astype(float)
+    bells_factor_sum = 10.0 ** (-0.0079 * (20.0 - t_pav_sum))
+    d1_norm_sum = fwd_records["PEAK_DEFL_1"] * bells_factor_sum
+    d2_norm_sum = fwd_records["PEAK_DEFL_2"] * bells_factor_sum
+    fwd_records["SCI"] = d1_norm_sum - d2_norm_sum
+    fwd_records["sci_score"] = ((SCI_FAILURE_THRESHOLD - fwd_records["SCI"]) / SCI_FAILURE_THRESHOLD * 100).clip(0, 100)
+    fwd_summary = fwd_records.groupby(["SHRP_ID", "STATE_CODE"], as_index=False)["sci_score"].mean()
+
+    summary = latest[["SHRP_ID", "STATE_CODE", "ANNUAL_TRUCK_VOLUME_TREND", "iri_score"]].merge(
+        fwd_summary, on=["SHRP_ID", "STATE_CODE"], how="left"
+    )
+    summary["rhi"] = np.where(
+        summary["sci_score"].isna(),
+        summary["iri_score"],
+        (summary["iri_score"] + summary["sci_score"]) / 2.0
+    )
     summary["condition"] = summary["rhi"].map(condition)
     counts = summary["condition"].value_counts().reindex(["Good", "Fair", "Poor"], fill_value=0)
-    points = summary[["SHRP_ID", "STATE_CODE", "annual_truck_volume", "rhi", "condition"]].replace({np.nan: None}).to_dict("records")
+    points = summary[["SHRP_ID", "STATE_CODE", "ANNUAL_TRUCK_VOLUME_TREND", "rhi", "condition"]].rename(
+        columns={"ANNUAL_TRUCK_VOLUME_TREND": "annual_truck_volume"}
+    ).replace({np.nan: None}).to_dict("records")
     return {"total_sections": len(summary), "conditions": counts.to_dict(), "points": points}
 
 
@@ -475,9 +645,19 @@ def live_prediction(payload: PredictionInput) -> dict[str, Any]:
 @app.post("/api/report.csv")
 def download_csv(payload: PredictionInput) -> StreamingResponse:
     result = predict(payload)
-    report = pd.DataFrame([{**payload.model_dump(), **result}])
+    flat_data = {
+        **payload.model_dump(),
+        "RHI": result["rhi"],
+        "Condition": result["condition"],
+        "IRI_Score": result["iri_score"],
+        "Predicted_Future_IRI": result["predicted_future_iri"],
+        "Predicted_Future_SCI": result.get("predicted_future_sci"),
+        "Structural_Score": result.get("fwd_score"),
+        "Structural_Health": result.get("fwd_health"),
+        "Recommendation": result["recommendation"],
+    }
     content = io.StringIO()
-    report.to_csv(content, index=False)
+    pd.DataFrame([flat_data]).to_csv(content, index=False)
     return StreamingResponse(
         iter([content.getvalue()]), media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=road-health-report.csv"},
@@ -489,51 +669,51 @@ def download_batch_template() -> StreamingResponse:
     template_data = [
         {
             "SHRP_ID": "0101",
-            "STATE_CODE": 4,
-            "YEAR": 2025,
-            "MRI": 0.85,
-            "AADTT_ALL_TRUCKS_TREND": 950,
-            "ANNUAL_TRUCK_VOLUME_TREND": 346750,
-            "ANNUAL_ESAL_TREND": 310000,
-            "CUMULATIVE_ESAL": 1500000,
-            "MEAN_ANN_TEMP_AVG": 15.5,
-            "FREEZE_INDEX_YR": 10.0,
-            "FREEZE_THAW_YR": 45.0,
-            "PEAK_DEFL_1": 450.0,
-            "PEAK_DEFL_2": 280.0,
-            "PEAK_DEFL_3": 210.0,
-            "PEAK_DEFL_4": 180.0,
-            "PEAK_DEFL_5": 140.0,
-            "PEAK_DEFL_6": 110.0,
-            "PEAK_DEFL_7": 70.0,
+            "STATE_CODE": 1,
+            "YEAR": 2022,
+            "MRI": 0.45,
+            "AADTT_ALL_TRUCKS_TREND": 200,
+            "ANNUAL_TRUCK_VOLUME_TREND": 80000,
+            "ANNUAL_ESAL_TREND": 50000,
+            "CUMULATIVE_ESAL": 200000,
+            "MEAN_ANN_TEMP_AVG": 18.0,
+            "FREEZE_INDEX_YR": 500.0,
+            "FREEZE_THAW_YR": 30.0,
+            "PEAK_DEFL_1": 120.0,
+            "PEAK_DEFL_2": 80.0,
+            "PEAK_DEFL_3": 60.0,
+            "PEAK_DEFL_4": 45.0,
+            "PEAK_DEFL_5": 35.0,
+            "PEAK_DEFL_6": 25.0,
+            "PEAK_DEFL_7": 15.0,
             "DROP_LOAD": 710.0,
             "DROP_HEIGHT": 4,
-            "PAVEMENT_FAMILY": "ACTB",
+            "PAVEMENT_FAMILY": "ACUB",
             "LANE_NO": "F1",
         },
         {
             "SHRP_ID": "0102",
-            "STATE_CODE": 6,
-            "YEAR": 2025,
-            "MRI": 1.20,
-            "AADTT_ALL_TRUCKS_TREND": 1200,
-            "ANNUAL_TRUCK_VOLUME_TREND": 450000,
-            "ANNUAL_ESAL_TREND": 380000,
-            "CUMULATIVE_ESAL": 2200000,
-            "MEAN_ANN_TEMP_AVG": 12.0,
-            "FREEZE_INDEX_YR": 500.0,
-            "FREEZE_THAW_YR": 60.0,
-            "PEAK_DEFL_1": "",
-            "PEAK_DEFL_2": "",
-            "PEAK_DEFL_3": "",
-            "PEAK_DEFL_4": "",
-            "PEAK_DEFL_5": "",
-            "PEAK_DEFL_6": "",
-            "PEAK_DEFL_7": "",
-            "DROP_LOAD": "",
-            "DROP_HEIGHT": "",
-            "PAVEMENT_FAMILY": "",
-            "LANE_NO": "",
+            "STATE_CODE": 1,
+            "YEAR": 2014,
+            "MRI": 0.80,
+            "AADTT_ALL_TRUCKS_TREND": 700,
+            "ANNUAL_TRUCK_VOLUME_TREND": 250000,
+            "ANNUAL_ESAL_TREND": 200000,
+            "CUMULATIVE_ESAL": 1000000,
+            "MEAN_ANN_TEMP_AVG": 13.0,
+            "FREEZE_INDEX_YR": 1800.0,
+            "FREEZE_THAW_YR": 130.0,
+            "PEAK_DEFL_1": 300.0,
+            "PEAK_DEFL_2": 200.0,
+            "PEAK_DEFL_3": 145.0,
+            "PEAK_DEFL_4": 110.0,
+            "PEAK_DEFL_5": 85.0,
+            "PEAK_DEFL_6": 62.0,
+            "PEAK_DEFL_7": 42.0,
+            "DROP_LOAD": 710.0,
+            "DROP_HEIGHT": 4,
+            "PAVEMENT_FAMILY": "ACUB",
+            "LANE_NO": "F3",
         },
     ]
     content = io.StringIO()
@@ -547,7 +727,7 @@ def download_batch_template() -> StreamingResponse:
 
 @app.post("/api/batch")
 async def batch_prediction(file: UploadFile = File(...)) -> StreamingResponse:
-    """Score up to 50 CSV/XLSX records with surface, traffic, climate, and optional FWD structural data."""
+    """Score up to 50 CSV/XLSX records with synchronized surface & structural forecasting."""
     raw = await file.read()
     try:
         frame = pd.read_csv(io.BytesIO(raw)) if file.filename.lower().endswith(".csv") else pd.read_excel(io.BytesIO(raw))
@@ -640,22 +820,22 @@ async def batch_prediction(file: UploadFile = File(...)) -> StreamingResponse:
                 "Row": index + 1,
                 "SHRP_ID": shrp_val,
                 "STATE_CODE": state_val,
-                "Measured_Year": hist["year"],
-                "Measured_IRI": hist["measured_iri"],
+                "Survey_Year": hist["year"],
+                "Historical_IRI": hist["measured_iri"],
                 "Historical_IRI_Score": hist["iri_score"],
-                "Historical_FWD_Health": hist["fwd_health"],
-                "Historical_FWD_Score": hist["fwd_score"] if hist["fwd_score"] is not None else "N/A",
+                "Historical_SCI": hist["measured_sci"] if hist["measured_sci"] is not None else "N/A",
+                "Historical_Structural_Score": hist["fwd_score"] if hist["fwd_score"] is not None else "N/A",
                 "Historical_RHI": hist["rhi"],
                 "Historical_Condition": hist["condition"],
                 "Present_Year": pres["year"],
                 "Estimated_2026_IRI": pres["estimated_iri"],
                 "Present_2026_IRI_Score": pres["iri_score"],
+                "Estimated_2026_SCI": pres["estimated_sci"] if pres["estimated_sci"] is not None else "N/A",
+                "Present_2026_Structural_Score": pres["fwd_score"] if pres["fwd_score"] is not None else "N/A",
                 "Present_2026_RHI": pres["rhi"],
                 "Present_2026_Condition": pres["condition"],
-                "Simulated_Fast_Forward_Years": pres["simulated_years"],
-                "IRI_Deterioration_Delta": pres["iri_change"],
+                "Fast_Forward_Years": pres["simulated_years"],
                 "Structural_Policy": pres["policy"],
-                "Top_Risk_Driver": result["explanation"][0]["feature"] if result["explanation"] else "N/A",
                 "Recommendation": result["recommendation"],
             })
         except Exception as exc:

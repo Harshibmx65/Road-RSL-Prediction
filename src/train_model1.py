@@ -150,7 +150,6 @@ df_full['HISTORICAL_IRI_SCORE'] = (
 
 # 2. Fast iterative forecasting to 2026
 booster = model.get_booster()
-from xgboost import DMatrix
 
 def forecast_to_present(row, target_year=CURRENT_YEAR):
     current_mri = float(row['MRI'])
@@ -169,8 +168,7 @@ def forecast_to_present(row, target_year=CURRENT_YEAR):
 
     for yr in range(start_year, target_year):
         arr = np.array([[current_mri, aadtt, truck_vol, ann_esal, current_cum_esal, yr, temp, freeze_idx, freeze_thaw]], dtype=np.float32)
-        dmat = DMatrix(arr, feature_names=features)
-        raw_next_mri = float(booster.predict(dmat)[0])
+        raw_next_mri = float(booster.inplace_predict(arr)[0])
         
         # PROFESSIONAL INFERENCE CLAMP (Data-Driven Heuristic)
         if raw_next_mri <= current_mri:

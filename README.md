@@ -1,6 +1,6 @@
 # 🛣️ Road Health Index (RHI) & Pavement Remaining Service Life Prediction System
 
-> **An AI-powered dual-track machine learning platform that evaluates pavement surface roughness, climate deterioration, and subsurface structural integrity to predict road health and guide proactive infrastructure maintenance.**
+> **An AI-powered synchronized dual-track machine learning platform that evaluates pavement surface roughness, heavy traffic loadings, climate stress cycles, and subsurface structural deflection curvature to predict pavement deterioration and guide proactive infrastructure maintenance.**
 
 ---
 
@@ -21,12 +21,14 @@
 2. [System Architecture & Machine Learning Pipeline](#2-system-architecture--machine-learning-pipeline)
    * [Dual-Track Architecture Flowchart](#dual-track-architecture-flowchart)
    * [Track 1: Model 1 — Surface Roughness, Traffic & Climate (XGBoost Regressor)](#track-1-model-1--surface-roughness-traffic--climate-xgboost-regressor)
-   * [Track 2: Model 2 — Structural Health & Sensor Deflections (K-Means Clustering)](#track-2-model-2--structural-health--sensor-deflections-k-means-clustering)
+   * [Track 2: Model 2 — Structural Fatigue & Deflection Curvature (Supervised XGBoost Regressor)](#track-2-model-2--structural-fatigue--deflection-curvature-supervised-xgboost-regressor)
+   * [Synchronized Dual AI Time-Series Simulation Engine](#synchronized-dual-ai-time-series-simulation-engine)
    * [The Fusion Engine: 50/50 Hybrid Index & Dynamic Fallback Architecture](#the-fusion-engine-5050-hybrid-index--dynamic-fallback-architecture)
 3. [Mathematical Formulations & Scoring Logic](#3-mathematical-formulations--scoring-logic)
+   * [Mechanistic Pavement Indices ($SCI$ & $BDI$)](#mechanistic-pavement-indices-sci--bdi)
    * [Model 1: Normalized IRI Surface Score Formula](#model-1-normalized-iri-surface-score-formula)
-   * [Model 2: Continuous Structural Health Score Formula](#model-2-continuous-structural-health-score-formula)
-   * [Composite RHI Fusion Formula](#composite-rhi-fusion-formula)
+   * [Model 2: Normalized SCI Structural Score Formula](#model-2-normalized-sci-structural-score-formula)
+   * [Composite Synchronized RHI Fusion Formula](#composite-synchronized-rhi-fusion-formula)
    * [Pavement Condition & Decision Matrix](#pavement-condition--decision-matrix)
 4. [Repository Directory & File Structure](#4-repository-directory--file-structure)
 5. [Exhaustive Codebase & Function Catalog](#5-exhaustive-codebase--function-catalog)
@@ -60,63 +62,65 @@
 ## 1. Project Overview & Executive Summary
 
 ### The Core Problem
-Highways and urban roads are critical economic lifelines, but they continuously deteriorate under two relentless forces:
-1. **Mechanical Stress**: Heavy commercial traffic and repetitive axle loading weaken structural layers over time.
-2. **Environmental & Climate Stress**: Seasonal thermal expansion, annual freeze-thaw cycles, and sub-zero freeze indices cause micro-cracks, surface raveling, and asphalt oxidation.
+Highways and transportation networks deteriorate continuously under two interacting forces:
+1. **Mechanical Axle Stress**: Heavy freight trucks and repetitive Equivalent Single Axle Loads (ESALs) induce tensile micro-strains at the bottom of the asphalt layer, leading to bottom-up fatigue cracking and base softening.
+2. **Environmental & Thermal Stress**: Seasonal thermal contraction, sub-zero freeze indices, and annual freeze-thaw cycles expand trapped moisture by ~9%, fracturing the bitumen matrix and accelerating surface roughness.
 
-Traditional road assessment relies on manual visual inspections or delayed municipal surveys. This manual approach is:
-* **Slow & Dangerous**: Inspectors must walk or drive along high-speed corridors.
-* **Subjective**: Different human inspectors assign varying condition scores to the same stretch of highway.
-* **Reactive Instead of Proactive**: Repairs are scheduled only after visible potholes and structural failures occur, costing up to **5× more** than preventive maintenance.
+Traditional road asset management relies heavily on periodic visual inspections and manual surveys, which suffer from major bottlenecks:
+* **Subjective & Inconsistent**: Visual severity ratings vary widely between field technicians.
+* **Hazardous & Slow**: Surveyors must walk or operate slow-moving vehicles across high-speed interstate corridors.
+* **Reactive Instead of Proactive**: Repairs are initiated only after visible potholes and severe rutting occur, costing **3× to 5× more** than preventive preservation.
+* **Structural Blindspot**: Surface-only visual surveys fail to detect subsurface base micro-fatigue before catastrophic failure breaks through.
 
 ### The Machine Learning Solution
-This project introduces an end-to-end, automated machine learning platform that computes a standardized **Road Health Index (RHI)** on a scale from **0 to 100**.
+This platform establishes an end-to-end, automated machine learning pipeline that computes a standardized **Road Health Index (RHI)** on a continuous scale from **0 to 100**.
 
-By combining **Non-Destructive Testing (NDT)** data with historical traffic trends and annual climate observations from the **FHWA Long-Term Pavement Performance (LTPP)** database, the system:
-1. Predicts future surface roughness deterioration using supervised regression.
-2. Clusters subsurface structural deflection profiles using unsupervised machine learning.
-3. Fuses both metrics into a unified index that prescribes concrete engineering actions: **Good** (routine maintenance), **Fair** (scheduled repair), or **Poor** (urgent structural intervention).
+By integrating **Non-Destructive Testing (NDT)** Falling Weight Deflectometer (FWD) sensor readings with high-speed laser profilometer scans, cumulative traffic trends, and Virtual Weather Station climate observations from the **FHWA Long-Term Pavement Performance (LTPP)** database, the platform:
+1. **Track 1 (Surface AI)**: Predicts future International Roughness Index ($\text{FUTURE\_IRI}$) deterioration using an `XGBRegressor` trained on traffic damage and climate freeze-thaw cycles.
+2. **Track 2 (Structural AI)**: Directly predicts future structural fatigue via the mechanistic **Surface Curvature Index ($SCI = D_1 - D_2$)** and **Base Damage Index ($BDI = D_2 - D_3$)** using a supervised `XGBRegressor`.
+3. **Synchronized Dual AI Simulation Engine**: Compounding longitudinal deterioration step-by-step from historical survey year forward to **Present Day (2026)** and a **10-Year Planning Horizon (2026–2036)**.
+4. **Dynamic Fallback Engine**: Fuses surface and structural scores into a balanced 50/50 RHI when FWD sensor data is available, with seamless 100% surface fallback for surface-only surveys.
 
 ```
                       ┌───────────────────────────────────────────────────────────┐
                       │              LTPP Multi-Source Raw Datasets               │
-                      │  (Profile Scans, Traffic Counts, FWD Sensors, Climate)    │
+                      │  (Laser Profilers, Traffic Trends, FWD Sensors, Climate)  │
                       └─────────────────────────────┬─────────────────────────────┘
                                                     │
                          ┌──────────────────────────┴──────────────────────────┐
                          ▼                                                     ▼
         ┌───────────────────────────────────┐                 ┌───────────────────────────────────┐
-        │       TRACK 1: SURFACE & CLIMATE  │                 │    TRACK 2: STRUCTURAL INTEGRITY  │
-        │   Supervised XGBoost Regressor    │                 │    Unsupervised K-Means Cluster   │
-        │   (MRI, ESAL, Trucks, Freeze)     │                 │   (7 FWD Geophones, Drop Load)    │
+        │   TRACK 1: SURFACE & CLIMATE AI   │                 │   TRACK 2: STRUCTURAL FATIGUE AI  │
+        │   Supervised XGBoost Regressor    │                 │   Supervised XGBoost Regressor    │
+        │   (MRI, ESALs, Trucks, Freeze)    │                 │   (SCI, BDI, Drop Load, Climate)  │
         └─────────────────┬─────────────────┘                 └─────────────────┬─────────────────┘
                           │                                                     │
-                          │ Computes 0-100 IRI Score                            │ Computes 0-100 Structural Score
+                          │ Computes 0–100 IRI Score                            │ Computes 0–100 SCI Score
                           ▼                                                     ▼
         ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-        │                              HYBRID FUSION ENGINE                                       │
-        │              Full Data: RHI = 50% IRI Score + 50% Structural Score                      │
-        │              Missing FWD Sensor Data: RHI = 100% IRI Score (Dynamic Fallback)           │
+        │                     SYNCHRONIZED DUAL AI TIME-SERIES SIMULATION ENGINE                  │
+        │               Historical Snapshot  ──►  Step-by-Step Simulation  ──►  Present Day (2026)│
+        │               Full Data: RHI = 50% IRI Score + 50% SCI Structural Score                 │
+        │               Surface-Only Survey: RHI = 100% IRI Score (Dynamic Fallback)              │
         └───────────────────────────────────────────┬─────────────────────────────────────────────┘
                                                     │
                                                     ▼
         ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-        │             FINAL ROAD HEALTH INDEX (0-100) & CONDITION CLASSIFICATION                  │
-        │             🟢 Good (75-100)  |  🟡 Fair (50-74)  |  🔴 Poor (0-49)                     │
+        │             FINAL ROAD HEALTH INDEX (0–100) & ACTIONABLE CLASSIFICATION                 │
+        │             🟢 Good (75–100)  |  🟡 Fair (50–74.9)  |  🔴 Poor (0–49.9)                 │
         └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Engineering Concepts for Beginners
-If you are new to civil or pavement engineering, here are the essential concepts used throughout the project:
-
-* **NDT (Non-Destructive Testing)**: Methods used to evaluate the physical properties of a road without damaging the asphalt or concrete layers (e.g., laser profilometers and falling weight sensors).
-* **IRI (International Roughness Index)**: The worldwide gold standard metric measuring road roughness in meters per kilometer ($\text{m/km}$). A lower IRI indicates a smooth, comfortable ride; a higher IRI indicates a bumpy, deteriorated surface ($> 2.5\text{ m/km}$ is considered failed).
-* **MRI (Mean Roughness Index)**: The mathematical average of the IRI measured along the left and right wheelpaths of a lane.
-* **FWD (Falling Weight Deflectometer)**: A specialized trailer equipment that drops a heavy weight on the road surface and measures instantaneous subsurface deflections using 7 geophone sensors placed at increasing distances from the load plate.
-* **Deflection Basin**: The bowl-shaped curve formed by the 7 FWD geophone sensors. A deep basin indicates a soft or failing pavement base, while a shallow basin indicates high structural stiffness.
-* **ESAL (Equivalent Single Axle Load)**: A standard engineering unit that converts the damaging effect of mixed traffic (cars, buses, heavy semi-trucks) into the equivalent number of standard 18,000-pound (80 kN) single-axle passes.
-* **Freeze-Thaw Cycle**: When water penetrates pavement cracks, freezes in winter (expanding by ~9%), and thaws in spring. This expansion-thaw cycle fractures the asphalt matrix.
-* **Freeze Index**: A cumulative temperature metric indicating the severity and duration of sub-zero temperatures over a given year.
+* **NDT (Non-Destructive Testing)**: Methods used to evaluate pavement physical properties without drilling destructive core holes.
+* **IRI (International Roughness Index)**: The worldwide gold standard metric quantifying longitudinal surface roughness in meters per kilometer ($\text{m/km}$). Values $> 2.5\text{ m/km}$ indicate a failed, rough surface.
+* **MRI (Mean Roughness Index)**: The mathematical average of IRI values measured simultaneously in the left and right wheelpaths.
+* **FWD (Falling Weight Deflectometer)**: Trailer-mounted testing equipment that drops a calibrated dynamic load onto a buffered plate and records peak surface deflections across 7 geophone sensors ($D_1$ to $D_7$ in microns, $\mu\text{m}$).
+* **Deflection Basin**: The bowl-shaped depression formed across the 7 geophones during impact.
+* **SCI (Surface Curvature Index)**: $SCI = D_1 - D_2$ ($\mu\text{m}$). Measures the steepness of the deflection basin between the load center ($0\text{ mm}$) and sensor 2 ($305\text{ mm}$), directly isolating asphalt surface layer fatigue.
+* **BDI (Base Damage Index)**: $BDI = D_2 - D_3$ ($\mu\text{m}$). Evaluates structural degradation within the base and subbase layers.
+* **ESAL (Equivalent Single Axle Load)**: Converts mixed traffic (passenger cars, buses, heavy multi-axle semi-trucks) into the damaging equivalent of standard 18,000-pound (80 kN) single-axle passes.
+* **Freeze-Thaw Cycle**: Freezing and thawing cycles of trapped moisture in pavement layers causing micro-fracturing.
 
 ---
 
@@ -127,45 +131,51 @@ If you are new to civil or pavement engineering, here are the essential concepts
 ```mermaid
 flowchart TD
     subgraph DataSources["1. Multi-Source Raw Datasets (data/)"]
-        D1["MON_HSS_PROFILE_SECTION.xlsx<br/>(Laser Profilometer Roughness)"]
-        D2["TRF_TREND.xlsx & TRF_TREND_1.xlsx<br/>(Traffic Volume, AADTT, ESAL)"]
+        D1["MON_HSS_PROFILE_SECTION.xlsx<br/>(Laser Profilometer Roughness MRI)"]
+        D2["TRF_TREND.xlsx & TRF_TREND_1.xlsx<br/>(Traffic Volume, AADTT, ESALs)"]
         D3["CLM_VWS_TEMP_ANNUAL.xlsx<br/>(Temperature, Freeze Index, Cycles)"]
-        D4["MON_DEFL_DROP_DATA.xlsx<br/>(FWD 7-Sensor Peak Deflections)"]
-        D5["EXPERIMENT_SECTION.xlsx<br/>(Pavement Family, Construction No)"]
+        D4["MON_DEFL_DROP_DATA.xlsx<br/>(FWD 7-Geophone Peak Deflections D1-D7)"]
+        D5["EXPERIMENT_SECTION.xlsx<br/>(Pavement Family ACTB/ACUB, Construction No)"]
     end
 
-    subgraph Track1["2. Track 1: Surface & Environmental Model (Supervised)"]
-        P1["Data Cleaning & Forward-Fill Imputation"]
-        P2["Feature Engineering: CUMULATIVE_ESAL & FUTURE_IRI"]
+    subgraph Track1["2. Track 1: Surface & Environmental Model (Supervised XGBoost)"]
+        P1["Data Cleaning & Forward-Fill Traffic Imputation"]
+        P2["Feature Engineering: CUMULATIVE_ESAL & FUTURE_IRI Target"]
         P3["XGBoost Regressor (n_est=200, lr=0.05, max_depth=6)"]
-        P4["Model Artifact: iri_prediction_model.pkl"]
-        P5["Normalized IRI Surface Score (0 to 100)"]
+        P4["Model Artifact: models/iri_prediction_model.pkl"]
+        P5["Normalized Surface IRI Score (0 to 100)"]
         D1 & D2 & D3 --> P1 --> P2 --> P3 --> P4 --> P5
     end
 
-    subgraph Track2["3. Track 2: Structural Integrity Model (Unsupervised)"]
-        S1["Sensor Drop Data Cleaning & Filter (Deflections 1-7)"]
-        S2["Categorical Label Encoding (Pavement & Lane)"]
-        S3["Feature Scaling (StandardScaler)"]
-        S4["K-Means Clustering (K=3, n_init=10)"]
-        S5["Centroid Mean Deflection Sort: Good, Fair, Poor"]
-        S6["Continuous Distance Interpolation Score (0 to 100)"]
-        D4 & D5 --> S1 --> S2 --> S3 --> S4 --> S5 --> S6
+    subgraph Track2["3. Track 2: Structural Health Model (Supervised XGBoost)"]
+        S1["Mechanistic Indices: SCI = D1 - D2, BDI = D2 - D3"]
+        S2["Merge Pavement Family, Lane & Traffic-Climate Features"]
+        S3["Chronological Sequence Matching: FUTURE_SCI Target"]
+        S4["XGBoost Regressor (n_est=250, lr=0.05, max_depth=6)"]
+        S5["Model Artifact: models/sci_prediction_model.pkl"]
+        S6["Normalized Structural SCI Score (0 to 100)"]
+        D4 & D5 & D2 & D3 --> S1 --> S2 --> S3 --> S4 --> S5 --> S6
     end
 
-    subgraph FusionEngine["4. Hybrid Fusion & Dynamic Fallback Engine"]
+    subgraph SimulationEngine["4. Synchronized Dual AI Time-Series Simulation"]
+        SE1["Historical Survey Snapshot (Survey Year)"]
+        SE2["Iterative Fast-Forward Simulation to Present Day (2026)"]
+        SE3["10-Year Planning Horizon Simulation (2026–2036)"]
+        P5 & S6 --> SE1 --> SE2 --> SE3
+    end
+
+    subgraph FusionEngine["5. Hybrid Fusion & Dynamic Fallback Engine"]
         F1{"Are FWD Sensors Available?"}
-        F2["Standard Fusion:<br/>RHI = 0.5 * IRI_Score + 0.5 * FWD_Score"]
-        F3["Dynamic Fallback:<br/>RHI = 1.0 * IRI_Score"]
-        P5 --> F1
-        S6 --> F1
+        F2["Standard Synchronized Fusion:<br/>RHI = 0.50 * IRI_Score + 0.50 * SCI_Score"]
+        F3["Dynamic Fallback:<br/>RHI = 1.00 * IRI_Score"]
+        SE2 --> F1
         F1 -- Yes --> F2
-        F1 -- No (Missing / Sensor Defect) --> F3
+        F1 -- No (Missing / Surface-Only) --> F3
     end
 
-    subgraph Delivery["5. Delivery & User Interfaces"]
+    subgraph Delivery["6. Delivery Interfaces & Reports"]
         U1["Interactive CLI Predictor (src/rhi_predictor.py)"]
-        U2["FastAPI REST API Server (Dashboard/main.py)"]
+        U2["FastAPI REST API Backend (Dashboard/main.py)"]
         U3["Web Control Center (Dashboard/static/index.html)"]
         U4["Automated CSV & PDF Inspection Reports"]
         F2 --> U1 & U2
@@ -177,96 +187,122 @@ flowchart TD
 ---
 
 ### Track 1: Model 1 — Surface Roughness, Traffic & Climate (XGBoost Regressor)
-* **Goal**: Predict the road's future surface roughness ($\text{FUTURE\_IRI}$) 1 year ahead and convert the prediction into an intuitive 0–100 scale.
-* **Why Supervised Learning?** We possess ground-truth historical laser profilometer scans spanning multiple years for hundreds of road sections.
-* **Why XGBoost?** Extreme Gradient Boosting handles non-linear interactions between traffic volume growth and climate stress with high fidelity and resistance to overfitting.
+* **Goal**: Predict the road's future surface roughness ($\text{FUTURE\_IRI}$) and convert the result into a normalized 0–100 Surface Score.
+* **Algorithm**: Extreme Gradient Boosting (`XGBRegressor`) with monotonic constraints to preserve physical validity.
 * **Features Used (9 Inputs)**:
-  1. `MRI`: Current Mean Roughness Index ($\text{m/km}$)
+  1. `MRI`: Mean Roughness Index ($\text{m/km}$)
   2. `AADTT_ALL_TRUCKS_TREND`: Average Annual Daily Truck Traffic (trucks/day)
-  3. `ANNUAL_TRUCK_VOLUME_TREND`: Total yearly truck count
+  3. `ANNUAL_TRUCK_VOLUME_TREND`: Total yearly commercial truck count
   4. `ANNUAL_ESAL_TREND`: Yearly Equivalent Single Axle Load damage
   5. `CUMULATIVE_ESAL`: Engineered cumulative sum of all ESAL damage sustained since construction
   6. `YEAR`: Measurement calendar year
   7. `MEAN_ANN_TEMP_AVG`: Mean annual ambient temperature ($^\circ\text{C}$)
   8. `FREEZE_INDEX_YR`: Annual cumulative freezing degree-days ($^\circ\text{C}\cdot\text{days}$)
-  9. `FREEZE_THAW_YR`: Number of annual freeze-thaw cycles
+  9. `FREEZE_THAW_YR`: Annual number of freeze-thaw thermal cycles
 
 ---
 
-### Track 2: Model 2 — Structural Health & Sensor Deflections (K-Means Clustering)
-* **Goal**: Discover structural health patterns and assign Good, Fair, or Poor structural ratings dynamically from Falling Weight Deflectometer (FWD) load test records.
-* **Why Unsupervised Learning?** Real-world road structural health does not come with clean human labels. Traditional supervised models suffered from data leakage and arbitrary human thresholds. K-Means clustering groups roads purely based on physical deformation physics.
-* **Features Used (11 Inputs)**:
-  1. `PEAK_DEFL_1` to `PEAK_DEFL_7`: Peak subsurface deflections ($\mu\text{m}$) measured at 0 mm, 203 mm, 305 mm, 457 mm, 610 mm, 914 mm, and 1524 mm from the load center.
-  2. `DROP_LOAD`: Impulsive impact load applied by the FWD plate.
-  3. `DROP_HEIGHT`: Height drop index (1 to 4).
-  4. `PAVEMENT_FAMILY_ENC`: Encoded pavement structure (`ACTB` = Asphalt Concrete over Treated Base, `ACUB` = Asphalt Concrete over Untreated Base).
-  5. `LANE_NO_ENC`: Encoded lane tested (`F1` = Outer Lane, `F3` = Inner/Passing Lane).
-* **Dynamic Centroid Mapping**: Once clusters are formed, the algorithm computes the average deflection across all 7 sensors for each cluster centroid. The cluster with the lowest mean deflection is designated **Good**, the middle cluster is **Fair**, and the cluster with the highest deflection is **Poor**.
+### Track 2: Model 2 — Structural Fatigue & Deflection Curvature (Supervised XGBoost Regressor)
+* **Goal**: Predict the annualized structural degradation rate via **$\text{ANNUAL\_DELTA\_SCI}$** ($\mu\text{m/year}$) and evaluate base condition via the **Base Damage Index ($BDI$)**.
+* **Why Annualized Delta?** Tree-based models cannot extrapolate monotonic trends beyond training bounds; predicting absolute future SCI caused heavily damaged roads to artificially "heal" (mean reversion). Predicting the annual rate of change ($\Delta \text{SCI} / \Delta t$) guarantees realistic, forward physical deterioration.
+* **AASHTO Temperature Normalization**: Raw asphalt deflections $D_1$ and $D_2$ are normalized to a standard $20^\circ\text{C}$ reference using the BELLS exponential correction:
+  $$D_{20} = D_t \times 10^{-0.0079 \times (20 - T_{\text{pavement}})}$$
+  This eliminates seasonal thermal softening bias before calculating the Surface Curvature Index ($SCI = D_{1,\text{norm}} - D_{2,\text{norm}}$).
+* **Continuous Unbroken Lifecycle**: The pipeline avoids artificial data fragmentation by tracking roads continuously across repairs rather than splitting by `CONSTRUCTION_NO`, adding a dynamic `YEARS_SINCE_LAST_REPAIR` feature.
+* **Features Used (15 Inputs)**:
+  1. `SCI`: Temperature-normalized Surface Curvature Index ($D_{1,\text{norm}} - D_{2,\text{norm}}$ in $\mu\text{m}$)
+  2. `BDI`: Base Damage Index ($D_2 - D_3$ in $\mu\text{m}$)
+  3. `DROP_LOAD`: Applied dynamic impact force (~710 kN)
+  4. `DROP_HEIGHT`: Height drop index (1 to 4)
+  5. `PAVEMENT_FAMILY_ENC`: Encoded pavement structure (`ACTB` = Asphalt Concrete over Treated Base, `ACUB` = Untreated Base)
+  6. `LANE_NO_ENC`: Encoded lane tested (`F1` = Outer Lane, `F3` = Inner Lane)
+  7. `AADTT_ALL_TRUCKS_TREND`: Daily truck traffic
+  8. `ANNUAL_TRUCK_VOLUME_TREND`: Annual truck traffic volume
+  9. `ANNUAL_ESAL_TREND`: Annual ESAL loading
+  10. `CUMULATIVE_ESAL`: Total accumulated structural loading
+  11. `YEAR`: Measurement calendar year
+  12. `YEARS_SINCE_LAST_REPAIR`: Calendar years elapsed since last construction or overlay event
+  13. `MEAN_ANN_TEMP_AVG`: Mean annual temperature ($^\circ\text{C}$)
+  14. `FREEZE_INDEX_YR`: Freezing index ($^\circ\text{C}\cdot\text{days}$)
+  15. `FREEZE_THAW_YR`: Annual freeze-thaw cycles
+
+---
+
+### Synchronized Dual AI Time-Series Simulation Engine
+Real-world inspection datasets frequently feature historic measurements (e.g., recorded in 2012 or 2018). The platform employs a **synchronized iterative step-wise engine** that compounds annual traffic loading and climate stress to project both surface roughness and structural fatigue to **Present Day (2026)** and across a **10-Year Planning Horizon (2026–2036)**.
+
+At each yearly simulation step:
+1. **Model 1** predicts $\text{IRI}_{t+1}$ using current surface condition, traffic, and climate. If the AI prediction indicates healing ($<\text{IRI}_t$), a data-driven physical deterioration rate ($\approx 0.04\text{ m/km/year}$) is applied as a lower clamp.
+2. **Model 2** predicts the annualized degradation rate $\widehat{\Delta \text{SCI}}$ using current structural condition, traffic, climate, and `YEARS_SINCE_LAST_REPAIR`.
+   * **Bounded Physical Decay**: The annual deterioration is bounded to realistic AASHTO envelope rates: $\text{annual\_degradation} = \max(1.5, \min(\widehat{\Delta \text{SCI}}, 8.0))$. If an error occurs, a physics-backed calibrated default of $4.2\ \mu\text{m/year}$ is used.
+   * **Delta Addition**: $\text{SCI}_{t+1} = \text{SCI}_t + \text{annual\_degradation}$.
+   * **Virtual Maintenance Trigger**: If simulated $\text{SCI}_{t+1} > 150.0\ \mu\text{m}$ (critical structural failure threshold), the system simulates a physical asphalt overlay by resetting $\text{SCI}_{t+1} \to 40.0\ \mu\text{m}$ (fresh overlay baseline) and resetting `YEARS_SINCE_LAST_REPAIR` $\to 0$.
+3. Cumulative ESALs compound annually: $\text{CUMULATIVE\_ESAL}_{t+1} = \text{CUMULATIVE\_ESAL}_t + \text{ANNUAL\_ESAL}$.
 
 ---
 
 ### The Fusion Engine: 50/50 Hybrid Index & Dynamic Fallback Architecture
-Real-world transportation networks often have incomplete records: while surface roughness (IRI) can be scanned quickly from moving survey vans, structural FWD testing requires specialized lane-closure equipment and may be missing for certain sections.
+* **Full Inspection (Both Surface IRI and FWD Deflections available)**:
+  $$\text{RHI} = \left(0.50 \times \text{IRI\_Score}\right) + \left(0.50 \times \text{SCI\_Score}\right)$$
+* **Surface-Only Inspection (FWD unavailable or lane-closure not feasible)**:
+  $$\text{RHI} = 1.00 \times \text{IRI\_Score} \quad (\text{Dynamic Fallback Engaged})$$
 
-To solve this, our system implements a **Left-Join Dynamic Fallback Engine**:
-* **Complete Record (Both IRI and FWD available)**:
-  $$\text{RHI} = \left(0.5 \times \text{IRI\_Score}\right) + \left(0.5 \times \text{FWD\_Score}\right)$$
-* **Missing Structural Record (FWD unavailable or sensor defective)**:
-  $$\text{RHI} = 1.0 \times \text{IRI\_Score} \quad (\text{Dynamic Fallback Engaged})$$
-
-This guarantees that **100% of network segments** can be scored without crashing or discarding valid surface data.
+This guarantees **100% network segment coverage** without discarding valid surface scans.
 
 ---
 
 ## 3. Mathematical Formulations & Scoring Logic
 
+### Mechanistic Pavement Indices ($SCI$ & $BDI$)
+$$\text{SCI} = D_1 - D_2 \quad (\mu\text{m})$$
+$$\text{BDI} = D_2 - D_3 \quad (\mu\text{m})$$
+* $D_1$: Peak deflection at load plate center ($0\text{ mm}$).
+* $D_2$: Peak deflection at sensor offset $203\text{ mm}$ ($8\text{ in}$).
+* $D_3$: Peak deflection at sensor offset $305\text{ mm}$ ($12\text{ in}$).
+
+---
+
 ### Model 1: Normalized IRI Surface Score Formula
-The Federal Highway Administration (FHWA) considers an IRI exceeding **$2.5\text{ m/km}$** as a structurally failed or critically rough pavement. We normalize the predicted future roughness ($\text{IRI}_{\text{pred}}$) to a 0–100 scale:
+The Federal Highway Administration (FHWA) defines an IRI $\ge 2.5\text{ m/km}$ as critical surface failure. The continuous 0–100 surface score is computed as:
 
-$$\text{IRI\_Score} = \text{clip}\left( \frac{2.5 - \text{IRI}_{\text{pred}}}{2.5} \times 100, \quad 0, \quad 100 \right)$$
+$$\text{IRI\_Score} = \text{clip}\left( \frac{2.5 - \text{IRI}}{2.5} \times 100, \quad 0, \quad 100 \right)$$
 
-* If $\text{IRI}_{\text{pred}} = 0.0\text{ m/km}$ (glass-smooth): $\text{Score} = 100.0$
-* If $\text{IRI}_{\text{pred}} = 1.25\text{ m/km}$ (standard good road): $\text{Score} = 50.0$
-* If $\text{IRI}_{\text{pred}} \ge 2.5\text{ m/km}$ (severe failure): $\text{Score} = 0.0$
-
----
-
-### Model 2: Continuous Structural Health Score Formula
-Instead of assigning a coarse step-function score (e.g. Good=100, Fair=60, Poor=20), our production pipeline calculates a **continuous Euclidean distance score** relative to the K-Means cluster centroids:
-
-Let $d_{\text{Good}}$ be the Euclidean distance in standardized feature space from the test sample to the **Good** cluster centroid, and $d_{\text{Poor}}$ be the distance to the **Poor** cluster centroid:
-
-$$\text{FWD\_Score} = \left( \frac{d_{\text{Poor}}}{d_{\text{Good}} + d_{\text{Poor}}} \right) \times 100$$
-
-* When a sample is very close to the **Good** centroid ($d_{\text{Good}} \to 0$): $\text{FWD\_Score} \to 100.0$
-* When a sample is equidistant between both: $\text{FWD\_Score} \approx 50.0$
-* When a sample is very close to the **Poor** centroid ($d_{\text{Poor}} \to 0$): $\text{FWD\_Score} \to 0.0$
+* $\text{IRI} = 0.0\text{ m/km}$ (glass-smooth): $\text{Score} = 100.0$
+* $\text{IRI} = 1.25\text{ m/km}$ (good highway): $\text{Score} = 50.0$
+* $\text{IRI} \ge 2.5\text{ m/km}$ (severely deteriorated): $\text{Score} = 0.0$
 
 ---
 
-### Composite RHI Fusion Formula
+### Model 2: Normalized SCI Structural Score Formula
+A Surface Curvature Index $\text{SCI} \ge 200.0\ \mu\text{m}$ indicates extensive upper asphalt fatigue micro-cracking and loss of tensile stiffness. The continuous 0–100 structural score is computed as:
 
+$$\text{SCI\_Score} = \text{clip}\left( \frac{200.0 - \text{SCI}}{200.0} \times 100, \quad 0, \quad 100 \right)$$
+
+* $\text{SCI} \le 0.0\ \mu\text{m}$ (infinitely rigid): $\text{Score} = 100.0$
+* $\text{SCI} = 50.0\ \mu\text{m}$ (sound, elastic asphalt): $\text{Score} = 75.0$
+* $\text{SCI} \ge 200.0\ \mu\text{m}$ (fatigue failure): $\text{Score} = 0.0$
+
+---
+
+### Composite Synchronized RHI Fusion Formula
 $$\text{RHI} = \begin{cases} 
-\dfrac{\text{IRI\_Score} + \text{FWD\_Score}}{2} & \text{if FWD data is available} \\[8pt]
-\text{IRI\_Score} & \text{if FWD data is missing (Dynamic Fallback)}
+0.50 \times \text{IRI\_Score} + 0.50 \times \text{SCI\_Score} & \text{if FWD sensor data is available} \\[8pt]
+1.00 \times \text{IRI\_Score} & \text{if FWD sensor data is missing (Dynamic Fallback)}
 \end{cases}$$
 
 ---
 
 ### Pavement Condition & Decision Matrix
 
-| RHI Score Range | Condition Rating | Structural Status | Recommended Engineering Action |
-| :---: | :---: | :---: | :--- |
-| **75.0 – 100.0** | 🟢 **Good** | High structural integrity & smooth surface | Routine inspection, crack sealing, and preventive surface treatments. |
-| **50.0 – 74.9** | 🟡 **Fair** | Moderate surface wear or initial structural fatigue | Schedule thin asphalt overlay, micro-surfacing, or localized base patching. |
-| **0.0 – 49.9** | 🔴 **Poor** | Severe roughness, deep base failure, or extensive cracking | Immediate structural rehabilitation, deep mill and fill, or full-depth reconstruction. |
+| RHI Score Range | Condition Rating | Structural & Surface Status | Recommended Engineering Action |
+| :---: | :---: | :--- | :--- |
+| **75.0 – 100.0** | 🟢 **Good** | High structural integrity ($\text{SCI} \le 50\ \mu\text{m}$) and smooth surface ($\text{IRI} < 1.5\text{ m/km}$). | Routine inspection, crack sealing, and preventive surface preservation treatments. |
+| **50.0 – 74.9** | 🟡 **Fair** | Moderate surface wear ($\text{IRI } 1.5–2.5\text{ m/km}$) or early micro-fatigue ($\text{SCI } 50–100\ \mu\text{m}$). | Schedule thin asphalt overlay, micro-surfacing, or targeted milling and localized base patching. |
+| **0.0 – 49.9** | 🔴 **Poor** | Severe roughness ($\text{IRI} > 2.5\text{ m/km}$) or critical structural base fatigue ($\text{SCI} > 100\ \mu\text{m}$). | Immediate structural rehabilitation, full-depth reclamation (FDR), or complete reconstruction. |
 
 ---
 
 ## 4. Repository Directory & File Structure
-
-Below is the complete file tree of the project workspace:
 
 ```
 Road-RSL-Prediction/
@@ -280,270 +316,114 @@ Road-RSL-Prediction/
 │       ├── advanced.css            # Advanced Responsive Grid, PDF & Gauge Styling
 │       └── form-helpers.css        # Interactive Form Control & Switch Helpers
 │
-├── data/                           # Raw LTPP & Virtual Weather Station Excel Workbooks
-│   ├── .gitkeep
+├── data/                           # Raw LTPP & Virtual Weather Station Datasets
 │   ├── CLM_VWS_TEMP_ANNUAL.xlsx    # Climate Data (Annual Mean Temp, Freeze Index, Freeze-Thaw)
 │   ├── EXPERIMENT_SECTION.xlsx     # Section Metadata & Pavement Family Specifications
 │   ├── MON_DEFL_DROP_DATA.xlsx     # Falling Weight Deflectometer (FWD) Sensor Deflections
 │   ├── MON_HSS_PROFILE_SECTION.xlsx# High-Speed Profilometer Surface Roughness (MRI) Scans
 │   ├── TRF_TREND.xlsx              # Traffic Damage Trend (Annual ESAL Loads)
-│   └── TRF_TREND_1.xlsx            # Traffic Volume Trend (Daily AADTT & Annual Truck Volume)
+│   ├── TRF_TREND_1.xlsx            # Traffic Volume Trend (Daily AADTT & Annual Truck Volume)
+│   └── processed_network_cache.pkl # In-Memory Preprocessed Cache for Fast Server Start
 │
 ├── models/                         # Serialized Machine Learning & Preprocessing Artifacts
-│   ├── .gitkeep
-│   ├── iri_prediction_model.pkl    # Trained XGBoost Regressor for IRI Surface Prediction
-│   ├── fwd_kmeans_model.pkl        # Trained K-Means Clustering Model (K=3)
-│   ├── fwd_scaler.pkl              # Fitted StandardScaler for FWD Features
-│   ├── fwd_le_pav.pkl              # Fitted LabelEncoder for Pavement Family
-│   ├── fwd_le_lane.pkl             # Fitted LabelEncoder for Lane Number
-│   └── fwd_health_mapping.pkl      # Dynamic Mapping Dictionary (Cluster Index -> Health Rating)
+│   ├── iri_prediction_model.pkl    # Trained XGBoost Regressor for Surface Roughness (IRI)
+│   ├── deterioration_rate.txt      # Data-Driven Annual Surface Degradation Fallback Rate
+│   ├── sci_prediction_model.pkl    # Trained Supervised XGBoost Regressor for Structural Fatigue (SCI)
+│   ├── sci_le_pav.pkl              # Fitted LabelEncoder for Pavement Family
+│   ├── sci_le_lane.pkl             # Fitted LabelEncoder for Lane Designation
+│   └── sci_deterioration_rate.txt  # Data-Driven Annual Structural Degradation Fallback Rate
 │
 ├── notebooks/                      # Exploratory Data Analysis & Model Training Notebooks
-│   ├── .gitkeep
-│   ├── model1.ipynb                # Supervised Model 1 Development & XGBoost Evaluation
-│   ├── model2.ipynb                # Unsupervised Model 2 Development & K-Means Deflection Clustering
-│   └── RHI_Score.ipynb             # Dual-Model Fusion Pipeline & Complete Network RHI Analysis
+│   ├── model1.ipynb                # Supervised Model 1 Development (IRI XGBoost Regressor)
+│   ├── model2.ipynb                # Supervised Model 2 Development (Structural SCI XGBoost)
+│   └── RHI_Score.ipynb             # Master Dual-Track Synchronized Pipeline & Network Analysis
 │
-├── outputs/                        # Research Artifacts, Analysis Charts & Master RHI Dataset
-│   ├── .gitkeep
-│   ├── actual_vs_predicted.png     # Scatter Plot of Model 1 Actual vs Predicted Future IRI
-│   ├── fwd_kmeans_clusters.png     # 3D/2D Projection of FWD Structural Health Clusters
-│   ├── iri_score_distribution.png  # Histogram Distribution of Network IRI Scores
-│   ├── rhi_distribution.png        # Bar Distribution of Network RHI Health Ratings
-│   └── rhi_scores.csv              # Master Scored Dataset for all 502 LTPP Road Sections
+├── outputs/                        # Master Scored Datasets & Validation Plots
+│   ├── model1_predictions.csv      # Scored Model 1 Longitudinal Forecasts
+│   ├── rhi_scores.csv              # Master Scored Dataset for all 502 LTPP Road Sections
+│   └── Road_Health_Index_Project_Guide.pdf # Official Project Architectural Guidebook
 │
 ├── outputs_test/                   # Verification Test Outputs
-│   └── sample_prediction.csv       # Scored Output from the Notebook Sample Test Script
+│   └── sample_prediction.csv       # Scored Output from Standalone Verification Test Suite
 │
-├── src/                            # Standalone Production Python Scripts
-│   ├── train_model1.py             # CLI Script to Clean Data & Train Supervised Model 1
-│   ├── train_model2.py             # CLI Script to Clean Data & Train Unsupervised Model 2
+├── src/                            # Production Python Scripts
+│   ├── train_model1.py             # CLI Script to Clean Data & Train Supervised Model 1 (IRI)
+│   ├── train_model2.py             # CLI Script to Clean Data & Train Supervised Model 2 (SCI)
 │   └── rhi_predictor.py            # Interactive Terminal CLI Predictor for Custom Roads
 │
 ├── testing/                        # Automated Testing & Verification
-│   └── test_rhi_score.ipynb        # Single-Road Verification Test Notebook
+│   └── test_rhi_score.ipynb        # Standalone Verification Test Suite Notebook
 │
 ├── requirements.txt                # Unified Python Dependencies Specification
 ├── SETUP.md                        # Step-by-Step Beginner Setup & Installation Manual
-└── README.md                       # Comprehensive Project Documentation & Function Catalog
+├── explain.md                      # Executive Project Summary & Defense Q&A Guide
+└── README.md                       # Comprehensive Project Documentation & Technical Reference
 ```
 
 ---
 
 ## 5. Exhaustive Codebase & Function Catalog
 
-This section provides a detailed explanation of every file and every function in the codebase.
-
----
-
 ### Backend Scripts (`src/`)
 
-#### [`src/train_model1.py`](file:///c:/Users/rajan/Road-RSL-Prediction/src/train_model1.py)
-* **File Purpose**: Loads raw high-speed profiler roughness scans, traffic volume series, annual ESAL loading, and climate temperature records. Preprocesses and engineers longitudinal features, then trains and saves the **XGBoost Surface Deterioration Regressor**.
-* **Functions**:
-  * `main()`
-    * **Role**: Primary execution routine for Model 1 pipeline.
-    * **Inputs / Data Read**: Reads [`data/MON_HSS_PROFILE_SECTION.xlsx`](file:///c:/Users/rajan/Road-RSL-Prediction/data/MON_HSS_PROFILE_SECTION.xlsx), [`data/TRF_TREND_1.xlsx`](file:///c:/Users/rajan/Road-RSL-Prediction/data/TRF_TREND_1.xlsx), [`data/TRF_TREND.xlsx`](file:///c:/Users/rajan/Road-RSL-Prediction/data/TRF_TREND.xlsx), and [`data/CLM_VWS_TEMP_ANNUAL.xlsx`](file:///c:/Users/rajan/Road-RSL-Prediction/data/CLM_VWS_TEMP_ANNUAL.xlsx).
-    * **Logic Steps**:
-      1. Uses `Path(__file__).resolve().parent.parent` for cross-platform, relative root path resolution.
-      2. Cleans IRI data by parsing `VISIT_DATE`, extracting `YEAR`, dropping redundant run attributes, and computing mean `MRI` grouped by `['SHRP_ID', 'STATE_CODE', 'CONSTRUCTION_NO', 'YEAR']`.
-      3. Merges traffic datasets (`TRF_TREND_1` and `TRF_TREND`) with an outer join to retain maximum historical years.
-      4. Merges IRI with traffic via inner join on composite section keys.
-      5. Applies **forward-fill imputation (`ffill`)** grouped by section to fill missing yearly traffic metrics without data leakage.
-      6. Formats `SHRP_ID` with 4-digit zero-padding (`str.zfill(4)`) and inner joins with annual climate records on `['SHRP_ID', 'STATE_CODE', 'YEAR']`.
-      7. Computes engineered feature `CUMULATIVE_ESAL = groupby(...).cumsum()`.
-      8. Shifts future roughness 1 step backward (`shift(-1)`) to establish the supervised target `FUTURE_IRI`.
-      9. Splits data into 80% train / 20% test partitions using `train_test_split(random_state=42)`.
-      10. Fits `XGBRegressor(n_estimators=200, learning_rate=0.05, max_depth=6, random_state=42)`.
-      11. Calculates and prints performance metrics ($R^2$ and MAE).
-      12. Serializes the trained model to [`models/iri_prediction_model.pkl`](file:///c:/Users/rajan/Road-RSL-Prediction/models/iri_prediction_model.pkl) using `joblib.dump`.
+#### [`src/train_model1.py`](src/train_model1.py)
+* **File Purpose**: Ingests high-speed laser profilometer scans, multi-year traffic series, and climate temperature records. Preprocesses longitudinal trends, engineers `CUMULATIVE_ESAL` and target `FUTURE_IRI`, fits an `XGBRegressor`, calculates the statistical fallback degradation rate, and serializes artifacts to `models/`.
+* **Execution**: `python src/train_model1.py`
 
----
+#### [`src/train_model2.py`](src/train_model2.py)
+* **File Purpose**: Ingests Falling Weight Deflectometer (FWD) peak deflection basins ($D_1$ through $D_7$), calculates mechanistic indices ($SCI = D_1 - D_2$, $BDI = D_2 - D_3$), merges traffic/climate records, pairs consecutive chronological test drops to create ground-truth `FUTURE_SCI` targets, trains a supervised `XGBRegressor`, and serializes `sci_prediction_model.pkl`, encoders, and fallback rates.
+* **Execution**: `python src/train_model2.py`
 
-#### [`src/train_model2.py`](file:///c:/Users/rajan/Road-RSL-Prediction/src/train_model2.py)
-* **File Purpose**: Cleans Falling Weight Deflectometer (FWD) multi-sensor drop test measurements and pavement metadata, normalizes features, trains an **unsupervised K-Means clustering model ($K=3$)**, and dynamically creates the health mapping dictionary based on deflection centroid magnitudes.
-* **Functions**:
-  * `main()`
-    * **Role**: Primary execution routine for Model 2 pipeline.
-    * **Inputs / Data Read**: Reads [`data/MON_DEFL_DROP_DATA.xlsx`](file:///c:/Users/rajan/Road-RSL-Prediction/data/MON_DEFL_DROP_DATA.xlsx) and [`data/EXPERIMENT_SECTION.xlsx`](file:///c:/Users/rajan/Road-RSL-Prediction/data/EXPERIMENT_SECTION.xlsx).
-    * **Logic Steps**:
-      1. Resolves directories and formats `SHRP_ID` with zero-padding.
-      2. Drops noisy/redundant deflection channels (`PEAK_DEFL_8`, `PEAK_DEFL_9`, `NON_DECREASING_DEFL`, etc.).
-      3. Inner joins deflection drops with pavement structural family metadata on `['SHRP_ID', 'STATE_CODE', 'CONSTRUCTION_NO']` and removes nulls.
-      4. Fits `LabelEncoder` on `PAVEMENT_FAMILY` and `LANE_NO`.
-      5. Assembles 11 structural features: 7 geophone peak deflections (`PEAK_DEFL_1` to `PEAK_DEFL_7`), `DROP_LOAD`, `DROP_HEIGHT`, `PAVEMENT_FAMILY_ENC`, and `LANE_NO_ENC`.
-      6. Fits and applies `StandardScaler` to bring all deflections and loads to zero-mean and unit-variance.
-      7. Fits `KMeans(n_clusters=3, random_state=42, n_init=10)`.
-      8. **Dynamic Health Mapping**: Calculates mean deflection across all 7 sensors per record, groups by predicted cluster, sorts cluster centroids by ascending average deflection, and dynamically maps:
-         * Smallest deflection centroid $\to$ `'Good'`
-         * Intermediate deflection centroid $\to$ `'Fair'`
-         * Largest deflection centroid $\to$ `'Poor'`
-      9. Saves 5 serialized artifacts to [`models/`](file:///c:/Users/rajan/Road-RSL-Prediction/models/): `fwd_kmeans_model.pkl`, `fwd_scaler.pkl`, `fwd_le_pav.pkl`, `fwd_le_lane.pkl`, and `fwd_health_mapping.pkl`.
-
----
-
-#### [`src/rhi_predictor.py`](file:///c:/Users/rajan/Road-RSL-Prediction/src/rhi_predictor.py)
-* **File Purpose**: Interactive command-line interface (CLI) that prompts the user for custom road inputs (roughness, traffic, climate, and optional FWD deflections), calculates Model 1 and Model 2 scores, activates dynamic fallback if needed, and prints formatted road condition diagnostics.
-* **Functions**:
-  * `main()`
-    * **Role**: Terminal user interaction and live inference.
-    * **Logic Steps**:
-      1. Loads all 6 saved artifacts from [`models/`](file:///c:/Users/rajan/Road-RSL-Prediction/models/); safely alerts if model files are missing.
-      2. Prompts user for 9 surface, traffic, and climate variables.
-      3. Executes Model 1 prediction: $\text{predicted\_iri} = \text{model1.predict()}$ and computes normalized $\text{IRI\_Score}$.
-      4. Prompts user: *"Do you have FWD Deflection data for this section? (y/n)"*.
-      5. **If Yes**: Prompts for 7 deflection values ($\mu\text{m}$), drop load, drop height, pavement family, and lane type. Encoders transform categoricals, `StandardScaler` normalizes inputs, `KMeans` predicts the structural cluster, and continuous distance interpolation calculates $\text{FWD\_Score}$.
-      6. **If No or Error**: Engages dynamic fallback: sets $\text{RHI} = \text{IRI\_Score}$ and labels FWD as *Fallback Engaged*.
-      7. Computes composite $\text{RHI} = (\text{IRI\_Score} + \text{FWD\_Score}) / 2$ (or pure IRI if fallback).
-      8. Prints a formatted ASCII result box showing Predicted IRI, IRI Score, FWD Health, Final RHI Score, and Condition.
+#### [`src/rhi_predictor.py`](src/rhi_predictor.py)
+* **File Purpose**: Interactive command-line terminal predictor that prompts the user for surface roughness, traffic, climate, and optional FWD deflections, calculates Historical Snapshot RHI, executes synchronized fast-forward simulation to 2026, and prints an executive diagnostic report.
+* **Execution**: `python src/rhi_predictor.py`
 
 ---
 
 ### FastAPI Server & Control Center (`Dashboard/`)
 
-#### [`Dashboard/main.py`](file:///c:/Users/rajan/Road-RSL-Prediction/Dashboard/main.py)
-* **File Purpose**: Production-grade, asynchronous FastAPI backend server. It serves REST API endpoints for section searching, historical record retrieval, live what-if simulation, SHAP feature impact explanations, 10-year forecasts, CSV/PDF report generation, batch scoring, and hosts static frontend assets.
-* **Pydantic Data Models**:
-  * `class PredictionInput(BaseModel)`
-    * Validates incoming request payloads for live and batch predictions.
-    * Enforces strict boundaries: `mri` (0 to 10), `aadtt` (0 to 50,000), `annual_truck_volume` (0 to 20,000,000), `annual_esal` (0 to 50,000,000), `cumulative_esal` (0 to 500,000,000), `year` (1980 to 2030), `mean_ann_temp_avg` (-100 to 100), `freeze_index_yr` (0 to 100,000), `freeze_thaw_yr` (0 to 100,000), `drop_load` (0 to 2,000), `drop_height` (1 to 4).
-    * Custom `@field_validator("year")`: Ensures year is between 1980 and current year.
-    * Custom `@field_validator("deflections")`: Ensures exactly 7 deflection values are provided between 0 and 2,000 $\mu\text{m}$.
-* **Core Helper Functions**:
-  * `normalize_id(series: pd.Series) -> pd.Series`
-    * Cleans numeric section and state identifiers, removes `.0` floating-point artifacts, and zero-pads IDs to 4 digits (`0101`, `0102`, etc.).
-  * `condition(score: float) -> str`
-    * Returns `'Good'` if $\text{score} \ge 75$, `'Fair'` if $\text{score} \ge 50$, else `'Poor'`.
-  * `recommendation(score: float) -> str`
-    * Returns contextual civil engineering maintenance recommendations based on the calculated RHI score band.
-  * `load_artifacts() -> dict[str, Any]`
-    * Decorated with `@lru_cache(maxsize=1)`. Loads and caches all 6 serialized model files in memory. Throws HTTP 503 if any artifact is missing.
-  * `load_network_data() -> tuple[pd.DataFrame, pd.DataFrame]`
-    * Decorated with `@lru_cache(maxsize=1)`. Reads and prepares the entire LTPP dataset in memory (joining IRI, traffic, climate, and FWD drop records).
-  * `predict(payload: PredictionInput) -> dict[str, Any]`
-    * The central inference engine. Executes XGBoost Model 1, computes normalized IRI score, evaluates FWD cluster and continuous score (or engages fallback), computes composite RHI, extracts **tree SHAP contributions** via `get_booster().predict(pred_contribs=True)` for top feature explanations, and generates a **10-year progressive deterioration forecast**.
-* **REST API Endpoints**:
-  * `GET /api/health` $\to$ Returns `{"status": "ok"}` for server liveness probes.
-  * `GET /api/metadata` $\to$ Returns supported categorical options for `pavement_families` and `lanes`.
-  * `GET /api/sections?search={query}&limit={limit}` $\to$ Autocomplete endpoint filtering monitored road sections by SHRP ID or state code.
-  * `GET /api/section/{shrp_id}?state_code={state_code}` $\to$ Returns historical IRI time-series, latest FWD deflection basin with $\pm 10\%$ confidence intervals, default input values, and baseline predictions for a selected road segment.
-  * `GET /api/network-summary` $\to$ Aggregates network-wide statistics, total section count, and condition distribution (Good, Fair, Poor) for doughnut chart visualization.
-  * `POST /api/predict` $\to$ Live what-if endpoint accepting custom parameter JSON and returning real-time RHI analysis, explanations, and 10-year projections.
-  * `POST /api/report.csv` $\to$ Streams a downloadable CSV assessment report for the active scenario.
-  * `POST /api/batch` $\to$ Asynchronously accepts uploaded CSV or Excel files containing up to 50 road segments, scores each row, and streams back a results CSV file.
-  * `app.mount("/", StaticFiles(directory=STATIC_DIR, html=True))` $\to$ Serves the web control center frontend.
+#### [`Dashboard/main.py`](Dashboard/main.py)
+* **File Purpose**: Asynchronous FastAPI server exposing REST API endpoints for live road simulation, SHAP feature importance explanations, 10-year projections, section searching, batch CSV assessment, and serving frontend assets.
+* **Key Components**:
+  * `class PredictionInput(BaseModel)`: Pydantic schema enforcing numerical bounds and validation.
+  * `score_iri(iri_val: float) -> float`: Normalizes IRI into 0–100 scale.
+  * `score_sci(sci_val: float) -> float`: Normalizes SCI into 0–100 scale.
+  * `load_artifacts() -> dict[str, Any]`: Caches trained models and degradation rates in memory.
+  * `predict(payload: PredictionInput) -> dict[str, Any]`: Core inference engine calculating historical RHI, 2026 fast-forward simulation, SHAP contributions, and 10-year projections.
 
 ---
 
 ### Frontend Application Stack (`Dashboard/static/`)
 
-#### [`Dashboard/static/index.html`](file:///c:/Users/rajan/Road-RSL-Prediction/Dashboard/static/index.html)
-* **File Purpose**: Semantic HTML5 layout defining the web control center interface.
-* **Layout Structure**:
-  * **Header**: Platform branding, title, and live network monitored status badge.
-  * **Sidebar**: Section search input, autocomplete list, and 9-field input form with FWD toggle switch, dynamic deflection basin inputs, and categorical dropdowns.
-  * **Hero Grid**: Dynamic SVG radial gauge meter displaying the final RHI score, condition badge, component breakdown bar chart, and summary metric cards.
-  * **Chart Grid**: Responsive Chart.js containers for the Historical/10-Year Deterioration Timeline and the Network Condition Distribution doughnut chart.
-  * **Action Sections**: Batch CSV/Excel file upload card, CSV/PDF report download triggers, and the built-in Notebook Sample Verification Test runner.
-
----
-
-#### [`Dashboard/static/app.js`](file:///c:/Users/rajan/Road-RSL-Prediction/Dashboard/static/app.js)
-* **File Purpose**: Client-side JavaScript controlling UI reactivity, asynchronous API communications, Chart.js rendering, client-side PDF generation, and input validation.
-* **Functions & Controllers**:
-  * `$ = (selector) => document.querySelector(selector)`: Lightweight DOM selection utility.
-  * `chartOptions(extra)`: Generates consistent Chart.js styling options (typography, colors, padding, responsiveness).
-  * `renderCharts()`: Instantiates and updates `componentChart` (bar chart comparing IRI vs FWD structural score) and `iriChart` (line chart plotting historical IRI, projected 10-year IRI, and the 2.5 m/km red failure threshold).
-  * `updateResult(result)`: Updates DOM text values, applies condition color styling (`#12965a` for Good, `#ee8b2d` for Fair, `#dd4d43` for Poor), animates the SVG radial gauge stroke offset, toggles the dynamic fallback badge, and triggers chart redraws.
-  * `getDeflections()`: Gathers the 7 numeric deflection inputs from `.deflection` textboxes.
-  * `setValue(id, value)`: Safely updates form element values.
-  * `fillForm(values)`: Populates all form fields with historic default data when a section is loaded.
-  * `validateNumericInputs()`: Validates numeric field bounds before dispatching API requests.
-  * `payload()`: Assembles current form state into a valid JSON object matching the `PredictionInput` schema.
-  * `toggleFwd()`: Toggles the visibility of the FWD structural inputs container based on the toggle switch.
-  * `requestPrediction()`: Dispatches POST request to `/api/predict` and calls `updateResult()`.
-  * `loadSection(shrpId, stateCode)`: Calls `GET /api/section/{shrp_id}`, populates historic defaults, and updates graphs.
-  * `searchSections()`: Debounced search listener fetching matching sections from `GET /api/sections`.
-  * `getErrorMessage(error, fallback)`: Multi-type error formatting parser for clean alert messaging.
-  * `showError(error)`: Displays modal error alerts to the user.
-  * `loadNetwork()`: Calls `GET /api/network-summary` and renders the network overview doughnut chart.
-  * `loadMetadata()`: Calls `GET /api/metadata` to populate `pavement-family` and `lane-no` dropdown selects.
-  * `downloadCsv()`: Sends POST request to `/api/report.csv` and triggers a client-side file download.
-  * `uploadBatch()`: Posts uploaded CSV/Excel file to `/api/batch` and downloads the scored batch CSV.
-  * `downloadPdf()`: Uses client-side `jsPDF` to build and export an executive PDF Road Health Assessment Report card.
-  * `runNotebookSampleTest()`: Sends a pre-configured sample payload to `/api/predict` and renders an executive test verification card directly in the UI.
-  * `initializeDeflections()`: Dynamically renders the 7 deflection input textboxes with helper text.
-  * `initializeRangeValidation()`: Attaches blur event listeners to clamp numeric values within valid boundaries.
-  * `DOMContentLoaded`: Main initialization hook binding all event listeners on page load.
-
----
-
-#### [`Dashboard/static/styles.css`](file:///c:/Users/rajan/Road-RSL-Prediction/Dashboard/static/styles.css), [`advanced.css`](file:///c:/Users/rajan/Road-RSL-Prediction/Dashboard/static/advanced.css), [`form-helpers.css`](file:///c:/Users/rajan/Road-RSL-Prediction/Dashboard/static/form-helpers.css)
-* **Styling Purpose**: Provides a clean dark-forest and emerald design system with glassmorphism card styling, responsive 2-column grids, SVG gauge animation keyframes, and custom toggle switches.
+* [`Dashboard/static/index.html`](Dashboard/static/index.html): Semantic layout featuring interactive sidebar parameters, FWD geophone inputs, radial SVG health gauge, component breakdown charts, 10-year deterioration timelines, batch upload, and random test sample verification.
+* [`Dashboard/static/app.js`](Dashboard/static/app.js): Reactive client-side logic controlling asynchronous API communication, SVG gauge animation, Chart.js graphs, and client-side PDF assessment export.
+* [`Dashboard/static/styles.css`](Dashboard/static/styles.css), [`advanced.css`](Dashboard/static/advanced.css), [`form-helpers.css`](Dashboard/static/form-helpers.css): Modern emerald/dark theme design system with responsive card layouts and glassmorphism styling.
 
 ---
 
 ### Research & Exploration Notebooks (`notebooks/`)
 
-#### [`notebooks/model1.ipynb`](file:///c:/Users/rajan/Road-RSL-Prediction/notebooks/model1.ipynb)
-* **Purpose**: Step-by-step development and validation of Model 1 (XGBoost Surface Regressor).
-* **Key Cells**:
-  1. Loads profile roughness, traffic volume, ESAL damage, and Virtual Weather Station climate workbooks.
-  2. Aggregates multiple profiler runs per section per year.
-  3. Demonstrates forward-fill imputation for temporal traffic trends.
-  4. Merges climate metrics (`MEAN_ANN_TEMP_AVG`, `FREEZE_INDEX_YR`, `FREEZE_THAW_YR`).
-  5. Computes engineered features (`CUMULATIVE_ESAL` and target `FUTURE_IRI`).
-  6. Evaluates XGBoost hyperparameters, calculates train/test $R^2$ and MAE, and plots actual vs predicted roughness scatters.
-
----
-
-#### [`notebooks/model2.ipynb`](file:///c:/Users/rajan/Road-RSL-Prediction/notebooks/model2.ipynb)
-* **Purpose**: Development of Model 2 (Unsupervised K-Means Structural Clustering).
-* **Key Cells**:
-  1. Loads raw FWD sensor drop tests and experiment pavement family metadata.
-  2. Filters out noisy deflection sensors (`PEAK_DEFL_8`, `PEAK_DEFL_9`) and non-decreasing test errors.
-  3. Encodes categorical variables (`PAVEMENT_FAMILY`, `LANE_NO`).
-  4. Standardizes structural features with `StandardScaler`.
-  5. Fits K-Means with $K=3$ and analyzes cluster centroids against average deflection curves.
-  6. Maps clusters to Good, Fair, and Poor structural health ratings.
-
----
-
-#### [`notebooks/RHI_Score.ipynb`](file:///c:/Users/rajan/Road-RSL-Prediction/notebooks/RHI_Score.ipynb)
-* **Purpose**: Master pipeline integration notebook.
-* **Key Cells**:
-  1. Loads all trained model artifacts from [`models/`](file:///c:/Users/rajan/Road-RSL-Prediction/models/).
-  2. Computes Model 1 future IRI and 0–100 IRI scores across all 502 LTPP sections.
-  3. Computes Model 2 continuous structural scores using cluster centroid distance interpolation.
-  4. Performs a **Left Join** between Model 1 and Model 2 datasets.
-  5. Applies dynamic fallback for sections missing FWD data.
-  6. Outputs summary distributions and exports [`outputs/rhi_scores.csv`](file:///c:/Users/rajan/Road-RSL-Prediction/outputs/rhi_scores.csv).
+* [`notebooks/model1.ipynb`](notebooks/model1.ipynb): Step-by-step development and validation of Model 1 (Surface IRI XGBoost Regressor).
+* [`notebooks/model2.ipynb`](notebooks/model2.ipynb): Development and validation of Model 2 (Supervised Structural SCI & BDI XGBoost Regressor).
+* [`notebooks/RHI_Score.ipynb`](notebooks/RHI_Score.ipynb): Master integration pipeline performing network-wide synchronized simulations and exporting `outputs/rhi_scores.csv`.
 
 ---
 
 ### Verification & Testing (`testing/`)
 
-#### [`testing/test_rhi_score.ipynb`](file:///c:/Users/rajan/Road-RSL-Prediction/testing/test_rhi_score.ipynb)
-* **Purpose**: Standalone unit verification test notebook.
-* **Key Cells**:
-  1. Loads trained model artifacts directly from the `models/` directory.
-  2. Implements `predict_rhi(sample)` function with climate and continuous centroid distance scoring.
-  3. Evaluates a sample road section (`MRI=0.85`, `AADTT=950`, `Temp=15.5°C`, 7 Deflections: `[450, 280, 210, 180, 140, 110, 70]`).
-  4. Asserts output format and exports verification results to [`outputs_test/sample_prediction.csv`](file:///c:/Users/rajan/Road-RSL-Prediction/outputs_test/sample_prediction.csv).
+* [`testing/test_rhi_score.ipynb`](testing/test_rhi_score.ipynb): Standalone verification test suite running multi-sample road profile checks (Good, Fair, Poor, Fallback) and exporting `outputs_test/sample_prediction.csv`.
 
 ---
 
 ### Datasets Catalog (`data/`)
 
-All raw datasets are derived from the US Federal Highway Administration (FHWA) Long-Term Pavement Performance (LTPP) program:
-
-| Dataset Filename | Key Columns | Engineering Description |
+| Dataset Filename | Key Features | Description |
 | :--- | :--- | :--- |
-| **`MON_HSS_PROFILE_SECTION.xlsx`** | `SHRP_ID`, `STATE_CODE`, `CONSTRUCTION_NO`, `VISIT_DATE`, `MRI` | High-Speed Profilometer laser scans measuring Mean Roughness Index ($\text{m/km}$) over time. |
-| **`TRF_TREND_1.xlsx`** | `SHRP_ID`, `STATE_CODE`, `CONSTRUCTION_NO`, `YEAR`, `AADTT_ALL_TRUCKS_TREND`, `ANNUAL_TRUCK_VOLUME_TREND` | Yearly truck volume trends and Average Annual Daily Truck Traffic counts. |
-| **`TRF_TREND.xlsx`** | `SHRP_ID`, `STATE_CODE`, `CONSTRUCTION_NO`, `YEAR`, `ANNUAL_ESAL_TREND` | Yearly Equivalent Single Axle Load (ESAL) heavy vehicle structural damage metrics. |
-| **`CLM_VWS_TEMP_ANNUAL.xlsx`** | `SHRP_ID`, `STATE_CODE`, `YEAR`, `MEAN_ANN_TEMP_AVG`, `FREEZE_INDEX_YR`, `FREEZE_THAW_YR` | Virtual Weather Station climate data tracking thermal stress, freeze degree-days, and freeze-thaw cycles. |
-| **`MON_DEFL_DROP_DATA.xlsx`** | `SHRP_ID`, `STATE_CODE`, `CONSTRUCTION_NO`, `PEAK_DEFL_1`–`PEAK_DEFL_7`, `DROP_LOAD`, `DROP_HEIGHT`, `LANE_NO` | Falling Weight Deflectometer (FWD) sensor readings measuring structural deflection basins under load. |
+| **`MON_HSS_PROFILE_SECTION.xlsx`** | `SHRP_ID`, `STATE_CODE`, `CONSTRUCTION_NO`, `VISIT_DATE`, `MRI` | High-speed profilometer laser scans measuring Mean Roughness Index ($\text{m/km}$). |
+| **`TRF_TREND_1.xlsx`** | `SHRP_ID`, `STATE_CODE`, `CONSTRUCTION_NO`, `YEAR`, `AADTT_ALL_TRUCKS_TREND`, `ANNUAL_TRUCK_VOLUME_TREND` | Yearly truck volume trends and daily freight traffic counts. |
+| **`TRF_TREND.xlsx`** | `SHRP_ID`, `STATE_CODE`, `CONSTRUCTION_NO`, `YEAR`, `ANNUAL_ESAL_TREND` | Yearly Equivalent Single Axle Load (ESAL) structural damage metrics. |
+| **`CLM_VWS_TEMP_ANNUAL.xlsx`** | `SHRP_ID`, `STATE_CODE`, `YEAR`, `MEAN_ANN_TEMP_AVG`, `FREEZE_INDEX_YR`, `FREEZE_THAW_YR` | Virtual Weather Station climate observations tracking thermal stress and freeze cycles. |
+| **`MON_DEFL_DROP_DATA.xlsx`** | `SHRP_ID`, `STATE_CODE`, `CONSTRUCTION_NO`, `PEAK_DEFL_1`–`PEAK_DEFL_7`, `DROP_LOAD`, `DROP_HEIGHT`, `LANE_NO` | Falling Weight Deflectometer (FWD) sensor readings measuring deflection basins under dynamic load. |
 | **`EXPERIMENT_SECTION.xlsx`** | `SHRP_ID`, `STATE_CODE`, `CONSTRUCTION_NO`, `PAVEMENT_FAMILY` | Structural metadata indicating pavement construction type (`ACTB` vs `ACUB`). |
 
 ---
@@ -552,41 +432,38 @@ All raw datasets are derived from the US Federal Highway Administration (FHWA) L
 
 | Artifact Name | Object Type | Description |
 | :--- | :--- | :--- |
-| **`iri_prediction_model.pkl`** | `xgboost.XGBRegressor` | Trained gradient boosted decision tree model predicting future roughness ($\text{m/km}$). |
-| **`fwd_kmeans_model.pkl`** | `sklearn.cluster.KMeans` | Fitted K-Means clustering model ($K=3$) for structural deflection patterns. |
-| **`fwd_scaler.pkl`** | `sklearn.preprocessing.StandardScaler` | Feature scaler normalizing FWD deflections and load variables. |
-| **`fwd_le_pav.pkl`** | `sklearn.preprocessing.LabelEncoder` | Categorical encoder for pavement families (`ACTB`, `ACUB`). |
-| **`fwd_le_lane.pkl`** | `sklearn.preprocessing.LabelEncoder` | Categorical encoder for test lane positions (`F1`, `F3`). |
-| **`fwd_health_mapping.pkl`** | `dict` | Dictionary mapping cluster indices ($0, 1, 2$) to health labels (`Good`, `Fair`, `Poor`). |
+| **`iri_prediction_model.pkl`** | `xgboost.XGBRegressor` | Trained gradient boosted model predicting future roughness ($\text{m/km}$). |
+| **`deterioration_rate.txt`** | `float` | Data-driven median annual surface degradation fallback rate ($\approx 0.04\text{ m/km/year}$). |
+| **`sci_prediction_model.pkl`** | `xgboost.XGBRegressor` | Trained supervised gradient boosted model predicting annualized rate of structural fatigue change ($\mu\text{m/year}$). |
+| **`sci_le_pav.pkl`** | `sklearn.preprocessing.LabelEncoder` | Categorical encoder for pavement families (`ACTB`, `ACUB`). |
+| **`sci_le_lane.pkl`** | `sklearn.preprocessing.LabelEncoder` | Categorical encoder for test lane designations (`F1`, `F3`). |
+| **`sci_deterioration_rate.txt`** | `float` | Calibrated physical structural degradation fallback rate ($4.2\ \mu\text{m/year}$). |
 
 ---
 
 ### Generated Output Artifacts (`outputs/` & `outputs_test/`)
 
-* [`outputs/rhi_scores.csv`](file:///c:/Users/rajan/Road-RSL-Prediction/outputs/rhi_scores.csv): Master scored database containing calculated IRI scores, FWD structural scores, final RHI scores, and condition ratings for all 502 LTPP road sections.
-* [`outputs/actual_vs_predicted.png`](file:///c:/Users/rajan/Road-RSL-Prediction/outputs/actual_vs_predicted.png): Validation scatter plot showing correlation between actual ground-truth roughness and Model 1 predictions.
-* [`outputs/fwd_kmeans_clusters.png`](file:///c:/Users/rajan/Road-RSL-Prediction/outputs/fwd_kmeans_clusters.png): Cluster visualization plot illustrating structural grouping by deflection basin depth.
-* [`outputs/iri_score_distribution.png`](file:///c:/Users/rajan/Road-RSL-Prediction/outputs/iri_score_distribution.png): Distribution of surface roughness condition across the monitored network.
-* [`outputs/rhi_distribution.png`](file:///c:/Users/rajan/Road-RSL-Prediction/outputs/rhi_distribution.png): Distribution of overall road health across Good, Fair, and Poor condition bands.
-* [`outputs_test/sample_prediction.csv`](file:///c:/Users/rajan/Road-RSL-Prediction/outputs_test/sample_prediction.csv): Verification output generated by the standalone test notebook.
+* [`outputs/rhi_scores.csv`](outputs/rhi_scores.csv): Master scored database containing calculated IRI scores, SCI structural scores, final RHI scores, and condition classifications for all 502 LTPP road sections across historical survey dates and 2026 present day.
+* [`outputs/model1_predictions.csv`](outputs/model1_predictions.csv): Intermediate dataset containing cleaned longitudinal surface roughness trends and forward forecasts.
+* [`outputs_test/sample_prediction.csv`](outputs_test/sample_prediction.csv): Verification output generated by the standalone test notebook.
 
 ---
 
 ## 6. REST API Documentation & Endpoints Reference
 
-The FastAPI backend exposes standard RESTful endpoints. When the server is running, interactive Swagger UI documentation is accessible at **`http://127.0.0.1:8000/docs`**.
+When the FastAPI server is running, interactive Swagger UI documentation is accessible at **`http://127.0.0.1:8000/docs`**.
 
 ### Summary of REST Endpoints
 
 | HTTP Method | Endpoint Path | Query / Body Parameters | Purpose |
 | :---: | :--- | :--- | :--- |
 | `GET` | `/api/health` | None | Server health-check / liveness probe. |
-| `GET` | `/api/metadata` | None | Returns valid categorical lists for Pavement Families and Lanes. |
+| `GET` | `/api/metadata` | None | Returns supported categorical lists for Pavement Families and Lanes. |
 | `GET` | `/api/sections` | `search` (str), `limit` (int) | Autocomplete search for road sections by SHRP ID or state code. |
-| `GET` | `/api/section/{shrp_id}` | `state_code` (str, required) | Returns historic data, deflection basin, and defaults for a section. |
+| `GET` | `/api/section/{shrp_id}` | `state_code` (str, required) | Returns historic data, deflection basin, and defaults for a selected road segment. |
 | `GET` | `/api/network-summary` | None | Aggregates network condition distribution for chart visualization. |
-| `POST` | `/api/predict` | JSON body (`PredictionInput`) | Real-time live prediction with SHAP explanations and 10-year projection. |
-| `POST` | `/api/report.csv` | JSON body (`PredictionInput`) | Generates and downloads a CSV assessment report for the scenario. |
+| `POST` | `/api/predict` | JSON body (`PredictionInput`) | Real-time prediction with dual-timeline simulation, SHAP explanations, and 10-year projection. |
+| `POST` | `/api/report.csv` | JSON body (`PredictionInput`) | Generates and streams a downloadable CSV assessment report. |
 | `POST` | `/api/batch` | `multipart/form-data` (`file`) | Evaluates up to 50 road records from an uploaded CSV/Excel file. |
 
 ---
@@ -603,7 +480,7 @@ The FastAPI backend exposes standard RESTful endpoints. When the server is runni
   "annual_truck_volume": 346750.0,
   "annual_esal": 310000.0,
   "cumulative_esal": 1500000.0,
-  "year": 2025,
+  "year": 2018,
   "mean_ann_temp_avg": 12.5,
   "freeze_index_yr": 3500.0,
   "freeze_thaw_yr": 240.0,
@@ -619,41 +496,37 @@ The FastAPI backend exposes standard RESTful endpoints. When the server is runni
 **Response Body (JSON)**:
 ```json
 {
-  "predicted_future_iri": 0.912,
-  "iri_score": 63.52,
-  "fwd_score": 60.0,
-  "fwd_health": "Fair",
-  "rhi": 61.76,
-  "condition": "Fair",
-  "recommendation": "Plan maintenance and investigate the contributing component.",
-  "fallback_engaged": false,
+  "historical_snapshot": {
+    "year": 2018,
+    "measured_iri": 0.85,
+    "iri_score": 66.0,
+    "measured_sci": 170.0,
+    "sci_score": 15.0,
+    "rhi": 40.5,
+    "condition": "Poor",
+    "fwd_health": "Poor",
+    "fwd_available": true
+  },
+  "present_day_estimation": {
+    "year": 2026,
+    "simulated_years": 8,
+    "predicted_future_iri": 1.17,
+    "iri_change": 0.32,
+    "iri_score": 53.2,
+    "predicted_future_sci": 200.0,
+    "sci_change": 30.0,
+    "sci_score": 0.0,
+    "rhi": 26.6,
+    "condition": "Poor",
+    "structural_policy": "Synchronized 50/50 Dual AI Forecast"
+  },
   "explanation": [
-    {
-      "feature": "Cumulative Esal",
-      "impact_percent": 38.4,
-      "direction": "increases roughness risk"
-    },
-    {
-      "feature": "Mri",
-      "impact_percent": 29.1,
-      "direction": "increases roughness risk"
-    },
-    {
-      "feature": "Freeze Thaw Yr",
-      "impact_percent": 18.2,
-      "direction": "increases roughness risk"
-    },
-    {
-      "feature": "Mean Ann Temp Avg",
-      "impact_percent": 14.3,
-      "direction": "reduces roughness risk"
-    }
+    { "feature": "Cumulative Esal", "impact_percent": 38.4, "direction": "increases roughness risk" },
+    { "feature": "Mri", "impact_percent": 29.1, "direction": "increases roughness risk" }
   ],
   "projection": [
-    { "year": 2026, "iri": 0.965, "iri_score": 61.4 },
-    { "year": 2027, "iri": 1.021, "iri_score": 59.16 },
-    { "year": 2028, "iri": 1.083, "iri_score": 56.68 },
-    { "year": 2035, "iri": 1.542, "iri_score": 38.32 }
+    { "year": 2026, "iri": 1.17, "iri_score": 53.2, "sci": 200.0, "sci_score": 0.0, "rhi": 26.6 },
+    { "year": 2036, "iri": 1.85, "iri_score": 26.0, "sci": 200.0, "sci_score": 0.0, "rhi": 13.0 }
   ]
 }
 ```
@@ -663,62 +536,53 @@ The FastAPI backend exposes standard RESTful endpoints. When the server is runni
 ## 7. User Workflows & Operational Guides
 
 ### Workflow 1: Training Models from Scratch
-If you update the dataset or wish to re-train the models from the terminal:
 ```powershell
 # 1. Train Model 1 (Surface Roughness & Climate XGBoost)
 python src/train_model1.py
 
-# 2. Train Model 2 (FWD Structural K-Means Clustering)
+# 2. Train Model 2 (Supervised Structural SCI & BDI XGBoost)
 python src/train_model2.py
 ```
 
 ### Workflow 2: Running the Interactive Terminal CLI Predictor
-For quick terminal-based predictions without starting a web server:
 ```powershell
 python src/rhi_predictor.py
 ```
-Follow the interactive prompts to enter surface and structural values.
 
-### Workflow 3: Starting the Web Control Center
-Launch the FastAPI server and open the dashboard in your web browser:
+### Workflow 3: Starting the Web Control Center Dashboard
 ```powershell
 python -m uvicorn Dashboard.main:app --reload --port 8000
 ```
 Open your browser at **`http://127.0.0.1:8000`**.
 
 ### Workflow 4: Batch Assessment
-1. Open the web control center at `http://127.0.0.1:8000`.
+1. Open the dashboard at `http://127.0.0.1:8000`.
 2. Scroll to the **Batch Assessment** section.
-3. Upload a `.csv` or `.xlsx` file containing the columns: `MRI`, `AADTT_ALL_TRUCKS_TREND`, `ANNUAL_TRUCK_VOLUME_TREND`, `ANNUAL_ESAL_TREND`, `CUMULATIVE_ESAL`, `YEAR`.
+3. Upload a `.csv` or `.xlsx` file containing the road features.
 4. Click **Upload & download results** to receive the scored dataset.
 
 ---
 
 ## 8. Comprehensive Domain & Technical Glossary
 
-* **AADTT (Average Annual Daily Truck Traffic)**: Total number of heavy freight trucks traveling across a road segment in an average 24-hour period.
-* **Centroid**: The geometric center of a cluster in multi-dimensional feature space representing the average characteristics of all points in that cluster.
-* **Deflection ($\mu\text{m}$)**: Vertical downward deformation of the pavement surface under an applied dynamic load, measured in microns ($1\ \mu\text{m} = 0.001\text{ mm}$).
-* **Dynamic Fallback**: A fault-tolerant software architecture that automatically shifts the RHI calculation to 100% surface roughness when subsurface geophone data is missing.
-* **ESAL (Equivalent Single Axle Load)**: A standard measure representing the damaging effect of a single 18,000 lb (80 kN) dual-tire axle pass on pavement life.
-* **Falling Weight Deflectometer (FWD)**: A non-destructive testing device simulating wheel loading by dropping a weight onto a buffered plate.
-* **FastAPI**: A high-performance modern Python web framework based on standard type hints and asynchronous request processing.
-* **Forward-Fill Imputation (`ffill`)**: A time-series data cleaning technique that carries forward the last known valid observation to populate missing subsequent intervals.
-* **International Roughness Index (IRI)**: Standardized scale ($\text{m/km}$) quantifying pavement longitudinal surface irregularities affecting vehicle dynamics and ride quality.
-* **Joblib**: Python serialization library optimized for fast storage and loading of large NumPy arrays and Scikit-Learn models.
-* **K-Means Clustering**: An unsupervised partition-based machine learning algorithm that groups $N$ observations into $K$ distinct clusters based on nearest mean centroids.
-* **Long-Term Pavement Performance (LTPP)**: Comprehensive research database maintained by the US Federal Highway Administration (FHWA) containing 30+ years of pavement monitoring data.
-* **Mean Roughness Index (MRI)**: The average of the International Roughness Index values measured concurrently in the inner and outer wheel paths.
-* **Non-Destructive Testing (NDT)**: Inspection techniques that evaluate structural integrity without causing physical or functional damage to the asset.
-* **Remaining Service Life (RSL)**: The estimated time in years before a pavement section degrades past the critical failure threshold ($2.5\text{ m/km}$) requiring reconstruction.
-* **Road Health Index (RHI)**: A composite 0–100 index integrating surface roughness, environmental climate exposure, and structural deflection stiffness.
-* **SHAP (SHapley Additive exPlanations)**: A game-theoretic approach that explains the individual contribution and impact direction of each feature on machine learning predictions.
-* **SHRP_ID**: Strategic Highway Research Program road section identifier (e.g. `0101`, `0102`).
-* **StandardScaler**: A preprocessing transformer that standardizes features by removing the mean and scaling to unit variance.
-* **Virtual Weather Station (VWS)**: Interpolated meteorological station models providing localized climate data (temperature, freeze index, precipitation) for pavement test sites.
-* **XGBoost (Extreme Gradient Boosting)**: An optimized distributed gradient boosting library implementing decision tree ensembles with regularization.
+* **AADTT (Average Annual Daily Truck Traffic)**: Total commercial freight trucks traveling across a road segment in an average 24-hour period.
+* **BDI (Base Damage Index)**: Mechanistic structural index ($D_2 - D_3$ in $\mu\text{m}$) evaluating base and subbase layer degradation.
+* **Deflection Basin**: The curvature formed across the 7 geophone sensors ($D_1$ through $D_7$) under Falling Weight Deflectometer impact.
+* **Dynamic Fallback**: Fault-tolerant architecture shifting RHI scoring to 100% surface roughness when subsurface geophone testing is unavailable.
+* **ESAL (Equivalent Single Axle Load)**: Standardized unit converting mixed axle traffic into equivalent 18,000 lb (80 kN) single-axle damage passes.
+* **Falling Weight Deflectometer (FWD)**: Non-destructive dynamic testing device recording surface deflection basins under impulse load.
+* **FastAPI**: High-performance modern asynchronous Python web framework.
+* **Forward-Fill Imputation (`ffill`)**: Longitudinal time-series data preparation technique carrying forward the last known valid observation.
+* **International Roughness Index (IRI)**: Standardized scale ($\text{m/km}$) quantifying pavement surface roughness affecting ride quality.
+* **Mean Roughness Index (MRI)**: The average of IRI values measured concurrently in the inner and outer wheelpaths.
+* **Non-Destructive Testing (NDT)**: Structural evaluation methods that do not cause physical damage to the infrastructure asset.
+* **Remaining Service Life (RSL)**: Estimated years before a pavement reaches the critical terminal failure threshold ($2.5\text{ m/km}$).
+* **Road Health Index (RHI)**: Standardized 0–100 index combining surface ride quality, traffic loading, climate stress, and structural deflection stiffness.
+* **SCI (Surface Curvature Index)**: Mechanistic structural index ($D_1 - D_2$ in $\mu\text{m}$) isolating upper asphalt fatigue cracking.
+* **SHAP (SHapley Additive exPlanations)**: Game-theoretic technique explaining individual feature impact contributions to machine learning predictions.
+* **XGBoost (Extreme Gradient Boosting)**: Optimized gradient boosting framework implementing regularized decision tree ensembles.
 
 ---
 
 ### 📘 Setup & Installation Manual
-For step-by-step instructions on setting up Python, creating virtual environments, installing dependencies, and running the platform on Windows, macOS, or Linux, refer to **[`SETUP.md`](file:///c:/Users/rajan/Road-RSL-Prediction/SETUP.md)**.
+For step-by-step setup, virtual environments, and commands on Windows, macOS, or Linux, see **[`SETUP.md`](SETUP.md)**.

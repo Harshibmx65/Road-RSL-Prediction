@@ -7,10 +7,40 @@ let currentConfidence = null;
 let selectedSection = null;
 let availableSections = [];
 
-const palette = { Good: '#12965a', Fair: '#ee8b2d', Poor: '#dd4d43' };
+const palette = { Good: '#0e8c53', Fair: '#d97706', Poor: '#c93b32' };
 
 function chartOptions(extra = {}) {
-  return { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { boxWidth: 10, font: { family: 'Manrope' } } } }, ...extra };
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: {
+          boxWidth: 12,
+          padding: 14,
+          font: { family: 'Manrope', size: 12.5, weight: '700' },
+          color: '#0f241a'
+        }
+      },
+      tooltip: {
+        titleFont: { family: 'Manrope', size: 13, weight: '700' },
+        bodyFont: { family: 'Manrope', size: 12.5, weight: '500' },
+        padding: 10,
+        cornerRadius: 8
+      }
+    },
+    scales: {
+      x: {
+        ticks: { font: { family: 'DM Mono', size: 11.5, weight: '600' }, color: '#3a5649' },
+        grid: { color: '#e2ede6' }
+      },
+      y: {
+        ticks: { font: { family: 'DM Mono', size: 11.5, weight: '600' }, color: '#3a5649' },
+        grid: { color: '#e2ede6' }
+      }
+    },
+    ...extra
+  };
 }
 
 function renderCharts() {
@@ -19,24 +49,37 @@ function renderCharts() {
   componentChart?.destroy(); iriChart?.destroy();
 
   const histIriScore = result.historical_snapshot ? result.historical_snapshot.iri_score : result.iri_score;
-  const histFwdScore = (result.historical_snapshot && result.historical_snapshot.fwd_score !== null) ? result.historical_snapshot.fwd_score : (result.fwd_score ?? 0);
+  const histSciScore = (result.historical_snapshot && result.historical_snapshot.fwd_score !== null) ? result.historical_snapshot.fwd_score : 0;
   const presentIriScore = result.present_estimation ? result.present_estimation.iri_score : result.iri_score;
+  const presentSciScore = (result.present_estimation && result.present_estimation.fwd_score !== null) ? result.present_estimation.fwd_score : (result.fwd_score ?? 0);
 
   componentChart = new Chart($('#component-chart'), {
     type: 'bar',
     data: {
-      labels: ['Historical Surface Score', 'Historical FWD Structural Score', 'Present-Day Surface Score'],
+      labels: [
+        'Hist Surface (IRI)',
+        'Hist Structural (SCI)',
+        '2026 Surface (IRI)',
+        '2026 Structural (SCI)'
+      ],
       datasets: [{
-        data: [histIriScore, histFwdScore, presentIriScore],
+        data: [histIriScore, histSciScore, presentIriScore, presentSciScore],
         backgroundColor: [
-          '#267a62',
-          (result.historical_snapshot && result.historical_snapshot.fwd_available) ? '#548bdf' : '#d5dfd8',
-          '#12965a'
+          '#1f6e57',
+          (result.historical_snapshot && result.historical_snapshot.fwd_available) ? '#3b82f6' : '#cbdad1',
+          '#0e8c53',
+          (result.fwd_score !== null) ? '#6366f1' : '#cbdad1'
         ],
         borderRadius: 6
       }]
     },
-    options: chartOptions({ scales: { y: { min: 0, max: 100, grid: { color: '#edf1ee' } }, x: { grid: { display: false } } }, plugins: { legend: { display: false } } })
+    options: chartOptions({
+      scales: {
+        y: { min: 0, max: 100, ticks: { font: { family: 'DM Mono', size: 11.5, weight: '600' }, color: '#3a5649' }, grid: { color: '#e2ede6' } },
+        x: { ticks: { font: { family: 'Manrope', size: 11.5, weight: '700' }, color: '#0f241a' }, grid: { display: false } }
+      },
+      plugins: { legend: { display: false } }
+    })
   });
 
   const historic = currentHistory.map((row) => ({ x: row.YEAR, y: row.MRI }));
@@ -61,16 +104,16 @@ function renderCharts() {
     type: 'line',
     data: {
       datasets: [
-        { label: 'Historical Measurements', data: historic.length ? historic : [{ x: histYear, y: histMri }], borderColor: '#267a62', backgroundColor: '#267a62', tension: 0.25, pointRadius: 4 },
-        { label: 'Simulated Trajectory to 2026', data: simulationData, borderColor: '#0ea5e9', borderDash: [4, 4], backgroundColor: '#0ea5e9', tension: 0.2, pointRadius: 3 },
-        { label: '10-Year Deterioration Projection', data: projectionData, borderColor: '#ee8b2d', borderDash: [6, 5], tension: 0.2, pointRadius: 3 },
-        { label: 'FHWA Failure Threshold (2.5 m/km)', data: [{ x: minX, y: 2.5 }, { x: maxX, y: 2.5 }], borderColor: '#dd4d43', borderDash: [3, 4], pointRadius: 0 },
+        { label: 'Historical Measurements', data: historic.length ? historic : [{ x: histYear, y: histMri }], borderColor: '#1f6e57', backgroundColor: '#1f6e57', tension: 0.25, pointRadius: 4 },
+        { label: 'Simulated Trajectory to 2026', data: simulationData, borderColor: '#0284c7', borderDash: [4, 4], backgroundColor: '#0284c7', tension: 0.2, pointRadius: 3 },
+        { label: '10-Year Deterioration Projection', data: projectionData, borderColor: '#d97706', borderDash: [6, 5], tension: 0.2, pointRadius: 3 },
+        { label: 'FHWA Failure Threshold (2.5 m/km)', data: [{ x: minX, y: 2.5 }, { x: maxX, y: 2.5 }], borderColor: '#c93b32', borderDash: [3, 4], pointRadius: 0 },
       ]
     },
     options: chartOptions({
       scales: {
-        x: { type: 'linear', ticks: { precision: 0 }, grid: { display: false } },
-        y: { title: { display: true, text: 'IRI (m/km)' }, grid: { color: '#edf1ee' } }
+        x: { type: 'linear', ticks: { precision: 0, font: { family: 'DM Mono', size: 11.5, weight: '600' }, color: '#3a5649' }, grid: { display: false } },
+        y: { title: { display: true, text: 'IRI Roughness (m/km)', font: { family: 'Manrope', size: 12.5, weight: '700' }, color: '#0f241a' }, ticks: { font: { family: 'DM Mono', size: 11.5, weight: '600' }, color: '#3a5649' }, grid: { color: '#e2ede6' } }
       }
     })
   });
@@ -103,8 +146,8 @@ function updateResult(result) {
     $('#hist-year-badge').textContent = `Year ${h.year}`;
     $('#hist-rhi').textContent = h.rhi.toFixed(1);
     $('#hist-rhi').style.color = histColor;
-    $('#hist-iri').textContent = `${h.measured_iri.toFixed(3)} m/km`;
-    $('#hist-fwd').textContent = h.fwd_health ? (h.fwd_score !== null ? `${h.fwd_health} (${h.fwd_score.toFixed(1)})` : h.fwd_health) : 'N/A';
+    $('#hist-iri').textContent = `${h.measured_iri.toFixed(3)} m/km (${h.iri_score.toFixed(1)}/100)`;
+    $('#hist-fwd').textContent = (h.measured_sci !== null && h.measured_sci !== undefined) ? `${h.measured_sci.toFixed(1)} μm (${h.fwd_score.toFixed(1)}/100)` : 'N/A';
     $('#hist-cond').textContent = `${h.condition}`;
     $('#hist-cond').style.color = histColor;
   }
@@ -114,21 +157,31 @@ function updateResult(result) {
     const presColor = palette[p.condition];
     $('#today-rhi').textContent = p.rhi.toFixed(1);
     $('#today-rhi').style.color = presColor;
-    $('#today-iri').textContent = `${p.estimated_iri.toFixed(3)} m/km`;
-    $('#today-delta').textContent = `${p.iri_change >= 0 ? '+' : ''}${p.iri_change.toFixed(3)} m/km (${p.simulated_years}y fast-forward)`;
+    $('#today-iri').textContent = `${p.estimated_iri.toFixed(3)} m/km (${p.iri_score.toFixed(1)}/100)`;
+    $('#today-sci').textContent = (p.estimated_sci !== null && p.estimated_sci !== undefined) ? `${p.estimated_sci.toFixed(1)} μm (${p.fwd_score.toFixed(1)}/100)` : 'N/A';
     $('#today-cond').textContent = `${p.condition}`;
     $('#today-cond').style.color = presColor;
     if ($('#today-policy')) {
-      $('#today-policy').textContent = p.policy || (p.simulated_years === 0 ? "Concurrent FWD data included." : "Historic FWD excluded (requires physical re-survey).");
+      $('#today-policy').textContent = p.policy || "Synchronized 50/50 Dual AI Forecast (Surface & Structural Decay Projected to 2026).";
     }
   }
 
   // 3. Component Breakdown Metric Rows
   if ($('#hist-measured-iri')) {
-    $('#hist-measured-iri').textContent = result.historical_snapshot ? `${result.historical_snapshot.measured_iri.toFixed(3)} m/km (${result.historical_snapshot.year})` : `${Number($('#mri').value).toFixed(3)} m/km`;
+    $('#hist-measured-iri').textContent = result.historical_snapshot ? `${result.historical_snapshot.measured_iri.toFixed(3)} m/km (Score: ${result.historical_snapshot.iri_score.toFixed(1)}/100)` : `${Number($('#mri').value).toFixed(3)} m/km`;
   }
-  $('#future-iri').textContent = result.present_estimation ? `${result.present_estimation.estimated_iri.toFixed(3)} m/km (2026)` : `${result.predicted_future_iri.toFixed(3)} m/km`;
-  $('#fwd-health').textContent = result.historical_snapshot ? result.historical_snapshot.fwd_health : (result.fwd_health ?? 'Not available');
+  if ($('#hist-measured-sci')) {
+    const h = result.historical_snapshot;
+    $('#hist-measured-sci').textContent = (h && h.measured_sci !== null && h.measured_sci !== undefined) ? `${h.measured_sci.toFixed(1)} μm (Score: ${h.fwd_score.toFixed(1)}/100)` : 'Not provided';
+  }
+  if ($('#future-iri')) {
+    const p = result.present_estimation;
+    $('#future-iri').textContent = p ? `${p.estimated_iri.toFixed(3)} m/km (Score: ${p.iri_score.toFixed(1)}/100)` : `${result.predicted_future_iri.toFixed(3)} m/km`;
+  }
+  if ($('#future-sci')) {
+    const p = result.present_estimation;
+    $('#future-sci').textContent = (p && p.estimated_sci !== null && p.estimated_sci !== undefined) ? `${p.estimated_sci.toFixed(1)} μm (Score: ${p.fwd_score.toFixed(1)}/100)` : (result.predicted_future_sci ? `${result.predicted_future_sci.toFixed(1)} μm` : 'N/A');
+  }
 
   renderCharts();
 }
@@ -158,8 +211,8 @@ function validateNumericInputs() {
     const value = Number(input.value);
     if (!Number.isFinite(value)) throw new Error(`${input.id} must be a valid number.`);
     if (input.id === 'year') {
-      if (value < 1980 || value > 2030 || value > currentYear) {
-        throw new Error(`Measurement year must be between 1980 and ${currentYear}.`);
+      if (value < 1980 || value > 2030) {
+        throw new Error('Measurement year must be between 1980 and 2030.');
       }
       return;
     }
@@ -305,31 +358,32 @@ function downloadPdf() {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
   const r = currentResult;
-  const h = r.historical_snapshot || { year: $('#year').value, measured_iri: $('#mri').value, rhi: r.rhi, condition: r.condition, fwd_health: 'N/A' };
-  const p = r.present_estimation || { year: 2026, estimated_iri: r.predicted_future_iri, rhi: r.rhi, condition: r.condition, simulated_years: 0, iri_change: 0 };
+  const h = r.historical_snapshot || { year: $('#year').value, measured_iri: $('#mri').value, iri_score: r.iri_score, rhi: r.rhi, condition: r.condition, measured_sci: null, fwd_score: null };
+  const p = r.present_estimation || { year: 2026, estimated_iri: r.predicted_future_iri, iri_score: r.iri_score, estimated_sci: r.predicted_future_sci, fwd_score: r.fwd_score, rhi: r.rhi, condition: r.condition, simulated_years: 0, iri_change: 0, sci_change: 0 };
 
-  pdf.setFillColor(29, 69, 59);
+  pdf.setFillColor(19, 57, 48);
   pdf.rect(0, 0, 210, 35, 'F');
   pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(18);
-  pdf.text('Dual-Timeline Road Health Index Assessment', 15, 21);
-  pdf.setTextColor(20, 38, 31);
+  pdf.text('Synchronized Dual-Timeline Road Health Assessment', 15, 21);
+  pdf.setTextColor(15, 36, 26);
   pdf.setFontSize(10.5);
   let y = 48;
 
   const rows = [
     ['Road Section', selectedSection ? `SHRP ${selectedSection.shrp_id} · State ${selectedSection.state_code}` : 'Live simulation scenario'],
-    ['1. Historical Snapshot Year', `${h.year} (Physical survey date)`],
-    ['Historical Measured IRI', `${Number(h.measured_iri).toFixed(3)} m/km`],
-    ['Historical FWD Health', h.fwd_health ?? 'N/A (Dynamic fallback)'],
-    ['Historical RHI Score', `${Number(h.rhi).toFixed(1)} / 100 (${h.condition})`],
+    ['1. Historical Baseline Survey', `Year ${h.year} (Physical survey date)`],
+    ['Historical Surface Roughness', `${Number(h.measured_iri).toFixed(3)} m/km (Score: ${Number(h.iri_score).toFixed(1)}/100)`],
+    ['Historical Structural Fatigue', h.measured_sci !== null && h.measured_sci !== undefined ? `SCI: ${Number(h.measured_sci).toFixed(1)} μm (Score: ${Number(h.fwd_score).toFixed(1)}/100)` : 'N/A (Surface-only)'],
+    ['Historical Synchronized RHI', `${Number(h.rhi).toFixed(1)} / 100 (${h.condition})`],
     ['----------------------------------------', '------------------------------------------------------------'],
-    ['2. Present Day Estimation', `Year ${p.year} (Time-Adjusted Forecast)`],
+    ['2. Present Day Estimation', `Year ${p.year} (Supervised Dual AI Forecast)`],
     ['Projection Interval', `${p.simulated_years} years of traffic & climate deterioration`],
-    ['Estimated 2026 Present IRI', `${Number(p.estimated_iri).toFixed(3)} m/km (Change: ${p.iri_change >= 0 ? '+' : ''}${Number(p.iri_change).toFixed(3)} m/km)`],
-    ['Present Day (2026) RHI', `${Number(p.rhi).toFixed(1)} / 100 (${p.condition})`],
-    ['Structural Data Consideration', p.policy || (p.simulated_years === 0 ? 'Concurrent FWD data included.' : 'Historic FWD excluded (requires physical re-survey).')],
-    ['Maintenance Action', r.recommendation]
+    ['Estimated 2026 Present IRI', `${Number(p.estimated_iri).toFixed(3)} m/km (Score: ${Number(p.iri_score).toFixed(1)}/100, Change: ${p.iri_change >= 0 ? '+' : ''}${Number(p.iri_change).toFixed(3)} m/km)`],
+    ['Estimated 2026 Present SCI', p.estimated_sci !== null && p.estimated_sci !== undefined ? `${Number(p.estimated_sci).toFixed(1)} μm (Score: ${Number(p.fwd_score).toFixed(1)}/100)` : 'N/A'],
+    ['Present Day (2026) Synchronized RHI', `${Number(p.rhi).toFixed(1)} / 100 (${p.condition})`],
+    ['Structural AI Policy', p.policy || 'Synchronized 50/50 Dual AI Forecast (Surface & Structural Decay Projected to 2026).'],
+    ['Recommended Maintenance', r.recommendation]
   ];
 
   rows.forEach(([label, value]) => {
@@ -341,8 +395,8 @@ function downloadPdf() {
     y += Math.max(8, lines.length * 5.5 + 3);
   });
 
-  pdf.setTextColor(104, 128, 120);
-  pdf.setFontSize(8);
+  pdf.setTextColor(58, 86, 73);
+  pdf.setFontSize(8.5);
   pdf.text(`Generated on ${new Date().toLocaleString()} · Road Health Intelligence Platform`, 15, 285);
   pdf.save('road-health-report.pdf');
 }
@@ -423,24 +477,28 @@ const testSamples = [
 ];
 
 function renderTestMeterResult(sample, data, sampleNum) {
+  const histSci = sample.deflections ? (sample.deflections[0] - sample.deflections[1]) : null;
   const hist = data.historical_snapshot || {
     year: sample.year,
     measured_iri: sample.mri,
     iri_score: Math.max(0, Math.min(100, ((2.5 - sample.mri) / 2.5) * 100)),
+    measured_sci: histSci,
+    fwd_score: histSci !== null ? Math.max(0, Math.min(100, ((200 - histSci) / 200) * 100)) : null,
     rhi: data.rhi,
     condition: data.condition,
-    fwd_health: sample.fwd_available ? 'Available' : 'N/A (Dynamic fallback)',
-    fwd_score: null,
     fwd_available: sample.fwd_available
   };
   const pres = data.present_estimation || {
     year: 2026,
     estimated_iri: data.predicted_future_iri,
     iri_score: data.iri_score,
+    estimated_sci: data.predicted_future_sci,
+    fwd_score: data.fwd_score,
     rhi: data.rhi,
     condition: data.condition,
     simulated_years: 2026 - sample.year,
-    iri_change: Math.max(0, data.predicted_future_iri - sample.mri)
+    iri_change: Math.max(0, data.predicted_future_iri - sample.mri),
+    policy: data.policy || 'Synchronized 50/50 Dual AI Forecast (Surface & Structural Decay Projected to 2026).'
   };
 
   const html = `
@@ -451,15 +509,15 @@ function renderTestMeterResult(sample, data, sampleNum) {
           <strong class="test-case-name">${sample.caseName}</strong>
         </div>
         <div id="test-header-tag" class="test-category-tag tag-${pres.condition.toLowerCase()}">
-          ${pres.condition.toUpperCase()} (2026 FORECAST)
+          ${pres.condition.toUpperCase()} (2026 SYNCHRONIZED FORECAST)
         </div>
       </div>
 
       <div class="test-summary-grid">
         <div class="summary-pill"><span>Measured Year:</span><strong>${sample.year}</strong></div>
         <div class="summary-pill"><span>Historical IRI:</span><strong>${sample.mri} m/km</strong></div>
+        <div class="summary-pill"><span>Historical SCI:</span><strong>${histSci !== null ? `${histSci.toFixed(1)} μm` : 'N/A'}</strong></div>
         <div class="summary-pill"><span>Daily Trucks:</span><strong>${sample.aadtt.toLocaleString()}</strong></div>
-        <div class="summary-pill"><span>Annual ESAL:</span><strong>${sample.annual_esal.toLocaleString()}</strong></div>
         <div class="summary-pill"><span>Pavement / Lane:</span><strong>${sample.pavement_family} / ${sample.lane_no}</strong></div>
         <div class="summary-pill"><span>Deflection D1–D7:</span><strong>${sample.deflections ? (sample.deflections[0] + '–' + sample.deflections[6] + ' μm') : 'N/A'}</strong></div>
       </div>
@@ -472,13 +530,13 @@ function renderTestMeterResult(sample, data, sampleNum) {
             <span class="dot"></span>
             Survey Baseline (${hist.year})
           </button>
-          <label class="test-switch-label" title="Toggle between Survey Baseline and 2026 AI Forecast">
+          <label class="test-switch-label" title="Toggle between Survey Baseline and 2026 Synchronized AI Forecast">
             <input type="checkbox" id="test-timeline-checkbox" checked>
             <span class="test-switch-slider"></span>
           </label>
           <button type="button" class="timeline-mode-btn active" id="test-mode-pres" data-mode="present">
             <span class="dot"></span>
-            Time-Adjusted Forecast (2026)
+            Synchronized 2026 AI Forecast
           </button>
         </div>
       </div>
@@ -535,7 +593,7 @@ function renderTestMeterResult(sample, data, sampleNum) {
           </div>
 
           <h2 id="test-meter-condition" style="text-align:center; margin-top:8px;">Awaiting mode</h2>
-          <p id="test-meter-rec" class="muted" style="text-align:center; margin-top:4px; font-size:12px; line-height:1.5;">--</p>
+          <p id="test-meter-rec" class="muted" style="text-align:center; margin-top:4px; font-size:13px; line-height:1.5;">--</p>
         </div>
 
         <div class="test-scores-breakdown" id="test-breakdown-container">
@@ -578,32 +636,32 @@ function renderTestMeterResult(sample, data, sampleNum) {
       fill.style.stroke = curColor;
       fill.style.strokeDashoffset = arcLength - (arcLength * clampedScore / 100);
       scoreElem.textContent = pres.rhi.toFixed(1);
-      eyebrowElem.textContent = 'TIME-ADJUSTED (2026) RHI METER';
-      condElem.textContent = `${pres.condition} condition (2026 Forecast)`;
+      eyebrowElem.textContent = 'SYNCHRONIZED (2026) 50/50 RHI METER';
+      condElem.textContent = `${pres.condition} condition (2026 Dual AI Forecast)`;
       condElem.style.color = curColor;
-      recElem.textContent = data.recommendation || 'Time-adjusted deterioration projection factoring cumulative heavy axle loadings and regional freeze-thaw cycles.';
+      recElem.textContent = data.recommendation || 'Synchronized dual-model AI forecast simulating cumulative heavy axle loadings and regional freeze-thaw cycles across surface and structural layers.';
 
       headerTag.className = `test-category-tag tag-${pres.condition.toLowerCase()}`;
-      headerTag.textContent = `${pres.condition.toUpperCase()} (2026 FORECAST)`;
+      headerTag.textContent = `${pres.condition.toUpperCase()} (2026 DUAL AI FORECAST)`;
 
       $(`#test-badge-${pres.condition.toLowerCase()}`)?.classList.add('active');
 
       breakdownElem.innerHTML = `
         <div class="test-score-card" style="border-left: 4px solid var(--green);">
           <span>Assessment Mode</span>
-          <strong style="color:var(--green)">Time-Adjusted Forecast (2026)</strong>
+          <strong style="color:var(--green)">Synchronized Dual AI Forecast (2026)</strong>
         </div>
         <div class="test-score-card">
-          <span>Forecast Horizon</span>
-          <strong style="color:var(--ink)">Present 2026 (+${pres.simulated_years} Years Aging)</strong>
+          <span>Estimated 2026 Surface (IRI)</span>
+          <strong style="color:var(--ink)">${pres.estimated_iri.toFixed(3)} m/km (Score: ${pres.iri_score.toFixed(1)}/100)</strong>
         </div>
         <div class="test-score-card">
-          <span>Estimated Present IRI</span>
-          <strong style="color:var(--ink)">${pres.estimated_iri.toFixed(3)} m/km (${pres.iri_change >= 0 ? '+' : ''}${pres.iri_change.toFixed(3)} delta)</strong>
+          <span>Estimated 2026 Structural (SCI)</span>
+          <strong style="color:#6366f1">${pres.estimated_sci ? `${pres.estimated_sci.toFixed(1)} μm (Score: ${pres.fwd_score.toFixed(1)}/100)` : 'N/A'}</strong>
         </div>
         <div class="test-score-card">
-          <span>Structural Policy</span>
-          <strong style="color:var(--muted); font-size:11px;">${pres.policy || (pres.simulated_years === 0 ? 'Concurrent FWD data included.' : '100% Surface AI (Old FWD safely excluded)')}</strong>
+          <span>Structural AI Policy</span>
+          <strong style="color:var(--muted); font-size:12px;">Synchronized 50/50 Surface & Structural Decay Model</strong>
         </div>
         <div class="test-score-card" style="background:#edf8f2; border-color:rgba(18,150,90,0.4);">
           <span>Present Day (2026) RHI</span>
@@ -618,9 +676,9 @@ function renderTestMeterResult(sample, data, sampleNum) {
       fill.style.strokeDashoffset = arcLength - (arcLength * clampedScore / 100);
       scoreElem.textContent = hist.rhi.toFixed(1);
       eyebrowElem.textContent = `HISTORICAL SURVEY (${hist.year}) RHI METER`;
-      condElem.textContent = `${hist.condition} condition (Survey Year ${hist.year})`;
+      condElem.textContent = `${hist.condition} condition (Survey Baseline ${hist.year})`;
       condElem.style.color = histColor;
-      recElem.textContent = `Baseline survey assessment combining physical surface roughness (${sample.mri} m/km) with structural FWD sensor readings.`;
+      recElem.textContent = `Baseline survey assessment combining physical surface roughness (${sample.mri} m/km) with structural deflection curvature (${histSci !== null ? `${histSci.toFixed(1)} μm` : 'N/A'}).`;
 
       headerTag.className = `test-category-tag tag-${hist.condition.toLowerCase()}`;
       headerTag.textContent = `${hist.condition.toUpperCase()} (${hist.year} BASELINE)`;
@@ -637,12 +695,12 @@ function renderTestMeterResult(sample, data, sampleNum) {
           <strong style="color:var(--ink)">${hist.measured_iri.toFixed(3)} m/km (Score: ${hist.iri_score.toFixed(1)}/100)</strong>
         </div>
         <div class="test-score-card">
-          <span>Historical FWD Structural Health</span>
-          <strong style="color:#548bdf">${hist.fwd_health} ${hist.fwd_score !== null ? `(${hist.fwd_score.toFixed(1)}/100)` : ''}</strong>
+          <span>Historical Structural SCI (D1–D2)</span>
+          <strong style="color:#3b82f6">${hist.measured_sci !== null ? `${hist.measured_sci.toFixed(1)} μm (Score: ${hist.fwd_score.toFixed(1)}/100)` : 'N/A'}</strong>
         </div>
         <div class="test-score-card">
           <span>Sensor Weighting</span>
-          <strong style="color:var(--muted); font-size:11px;">${hist.fwd_available ? '50% Surface + 50% Structural Deflections' : '100% Surface (Fallback)'}</strong>
+          <strong style="color:var(--muted); font-size:12px;">50% Surface (IRI) + 50% Structural (SCI)</strong>
         </div>
         <div class="test-score-card" style="background:#eef3f0; border-color:rgba(29,69,59,0.4);">
           <span>Historical Baseline RHI</span>
@@ -698,8 +756,9 @@ function initializeDeflections() {
   $('#deflection-inputs').innerHTML = Array.from({ length: 7 }, (_, index) => {
     const isCenter = index === 0;
     const isOuter = index === 6;
-    const helper = isCenter ? 'Center · e.g., 450' : isOuter ? 'Outer · e.g., 70' : '0–2,000 microns';
-    return `<label>Peak defl. ${index + 1}<input class="deflection" id="defl-${index + 1}" type="number" min="0" max="2000" step="0.1" placeholder="e.g., ${isCenter ? '450' : isOuter ? '70' : '200'}" required><small>${helper}</small></label>`;
+    const labelTitle = isCenter ? 'Peak defl. 1 (Center D1)' : isOuter ? 'Peak defl. 7 (Outer D7)' : `Peak defl. ${index + 1} (D${index + 1})`;
+    const helper = isCenter ? 'Center sensor · e.g., 450 μm' : isOuter ? 'Outer sensor · e.g., 70 μm' : 'Deflection 0–2,000 μm';
+    return `<label>${labelTitle}<input class="deflection" id="defl-${index + 1}" type="number" min="0" max="2000" step="0.1" placeholder="e.g., ${isCenter ? '450' : isOuter ? '70' : '200'}" required><small>${helper}</small></label>`;
   }).join('');
 }
 
@@ -813,6 +872,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Escape') hideSearchResults();
   });
 
+  const batchFileInput = $('#batch-file');
+  batchFileInput?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    const label = $('#batch-file-chosen');
+    if (label) {
+      label.textContent = file ? `📄 ${file.name}` : 'Choose file (.csv, .xlsx)';
+      label.style.borderColor = file ? 'var(--green)' : '#b8cebf';
+      label.style.color = file ? 'var(--ink)' : 'var(--ink-secondary)';
+    }
+  });
+
   $('#predictor-form').addEventListener('submit', (event) => { event.preventDefault(); currentHistory = []; currentBasin = null; currentConfidence = null; requestPrediction().catch(showError); });
   $('#csv-button').addEventListener('click', () => downloadCsv().catch(showError)); $('#pdf-button').addEventListener('click', downloadPdf);
   $('#batch-button').addEventListener('click', () => uploadBatch().catch(showError));
@@ -829,5 +899,3 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('Initialization error:', error);
   }
 });
-
-
