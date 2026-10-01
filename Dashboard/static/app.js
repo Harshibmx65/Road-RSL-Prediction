@@ -161,9 +161,7 @@ function updateResult(result) {
     $('#today-sci').textContent = (p.estimated_sci !== null && p.estimated_sci !== undefined) ? `${p.estimated_sci.toFixed(1)} μm (${p.fwd_score.toFixed(1)}/100)` : 'N/A';
     $('#today-cond').textContent = `${p.condition}`;
     $('#today-cond').style.color = presColor;
-    if ($('#today-policy')) {
-      $('#today-policy').textContent = p.policy || "Synchronized 50/50 Dual AI Forecast (Surface & Structural Decay Projected to 2026).";
-    }
+
   }
 
   // 3. Component Breakdown Metric Rows
@@ -377,12 +375,11 @@ function downloadPdf() {
     ['Historical Structural Fatigue', h.measured_sci !== null && h.measured_sci !== undefined ? `SCI: ${Number(h.measured_sci).toFixed(1)} μm (Score: ${Number(h.fwd_score).toFixed(1)}/100)` : 'N/A (Surface-only)'],
     ['Historical Synchronized RHI', `${Number(h.rhi).toFixed(1)} / 100 (${h.condition})`],
     ['----------------------------------------', '------------------------------------------------------------'],
-    ['2. Present Day Estimation', `Year ${p.year} (Supervised Dual AI Forecast)`],
+    ['2. Present Day Estimation', `Year ${p.year} (Present Day Forecast)`],
     ['Projection Interval', `${p.simulated_years} years of traffic & climate deterioration`],
     ['Estimated 2026 Present IRI', `${Number(p.estimated_iri).toFixed(3)} m/km (Score: ${Number(p.iri_score).toFixed(1)}/100, Change: ${p.iri_change >= 0 ? '+' : ''}${Number(p.iri_change).toFixed(3)} m/km)`],
     ['Estimated 2026 Present SCI', p.estimated_sci !== null && p.estimated_sci !== undefined ? `${Number(p.estimated_sci).toFixed(1)} μm (Score: ${Number(p.fwd_score).toFixed(1)}/100)` : 'N/A'],
     ['Present Day (2026) Synchronized RHI', `${Number(p.rhi).toFixed(1)} / 100 (${p.condition})`],
-    ['Structural AI Policy', p.policy || 'Synchronized 50/50 Dual AI Forecast (Surface & Structural Decay Projected to 2026).'],
     ['Recommended Maintenance', r.recommendation]
   ];
 
@@ -637,19 +634,19 @@ function renderTestMeterResult(sample, data, sampleNum) {
       fill.style.strokeDashoffset = arcLength - (arcLength * clampedScore / 100);
       scoreElem.textContent = pres.rhi.toFixed(1);
       eyebrowElem.textContent = 'SYNCHRONIZED (2026) 50/50 RHI METER';
-      condElem.textContent = `${pres.condition} condition (2026 Dual AI Forecast)`;
+      condElem.textContent = `${pres.condition} condition (2026 Forecast)`;
       condElem.style.color = curColor;
-      recElem.textContent = data.recommendation || 'Synchronized dual-model AI forecast simulating cumulative heavy axle loadings and regional freeze-thaw cycles across surface and structural layers.';
+      recElem.textContent = data.recommendation || 'Synchronized forecast simulating cumulative heavy axle loadings and regional freeze-thaw cycles across surface and structural layers.';
 
       headerTag.className = `test-category-tag tag-${pres.condition.toLowerCase()}`;
-      headerTag.textContent = `${pres.condition.toUpperCase()} (2026 DUAL AI FORECAST)`;
+      headerTag.textContent = `${pres.condition.toUpperCase()} (2026 FORECAST)`;
 
       $(`#test-badge-${pres.condition.toLowerCase()}`)?.classList.add('active');
 
       breakdownElem.innerHTML = `
         <div class="test-score-card" style="border-left: 4px solid var(--green);">
           <span>Assessment Mode</span>
-          <strong style="color:var(--green)">Synchronized Dual AI Forecast (2026)</strong>
+          <strong style="color:var(--green)">Forecast (2026)</strong>
         </div>
         <div class="test-score-card">
           <span>Estimated 2026 Surface (IRI)</span>
@@ -658,10 +655,6 @@ function renderTestMeterResult(sample, data, sampleNum) {
         <div class="test-score-card">
           <span>Estimated 2026 Structural (SCI)</span>
           <strong style="color:#6366f1">${pres.estimated_sci ? `${pres.estimated_sci.toFixed(1)} μm (Score: ${pres.fwd_score.toFixed(1)}/100)` : 'N/A'}</strong>
-        </div>
-        <div class="test-score-card">
-          <span>Structural AI Policy</span>
-          <strong style="color:var(--muted); font-size:12px;">Synchronized 50/50 Surface & Structural Decay Model</strong>
         </div>
         <div class="test-score-card" style="background:#edf8f2; border-color:rgba(18,150,90,0.4);">
           <span>Present Day (2026) RHI</span>
@@ -697,10 +690,6 @@ function renderTestMeterResult(sample, data, sampleNum) {
         <div class="test-score-card">
           <span>Historical Structural SCI (D1–D2)</span>
           <strong style="color:#3b82f6">${hist.measured_sci !== null ? `${hist.measured_sci.toFixed(1)} μm (Score: ${hist.fwd_score.toFixed(1)}/100)` : 'N/A'}</strong>
-        </div>
-        <div class="test-score-card">
-          <span>Sensor Weighting</span>
-          <strong style="color:var(--muted); font-size:12px;">50% Surface (IRI) + 50% Structural (SCI)</strong>
         </div>
         <div class="test-score-card" style="background:#eef3f0; border-color:rgba(29,69,59,0.4);">
           <span>Historical Baseline RHI</span>
